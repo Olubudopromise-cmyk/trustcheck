@@ -25,8 +25,6 @@ func TestVerify_RoutesToCorrectVerifier(t *testing.T) {
 	}{
 		{"domain -> domainVerifier", classifier.TypeDomain, "nonexistent.invalid",
 			Result{Status: "unreachable", TrustScore: 15, Summary: "Domain does not resolve."}},
-		{"url -> placeholder", classifier.TypeURL, "https://google.com",
-			Result{Status: "not_implemented", TrustScore: 0, Summary: placeholderSummary}},
 		{"ipv4 -> ipVerifier", classifier.TypeIPv4, "8.8.8.8",
 			Result{Status: "verified", TrustScore: 70, Summary: "Globally routable IP address."}},
 		{"ipv6 -> ipVerifier", classifier.TypeIPv6, "::1",
@@ -55,6 +53,24 @@ func TestVerify_UnknownTypeFallsBack(t *testing.T) {
 	got := Verify(classifier.InputType("nonsense"), "whatever")
 	if got.Status != "not_implemented" || got.TrustScore != 0 {
 		t.Errorf("unregistered type should fall back to placeholder, got %+v", got)
+	}
+}
+
+// TestVerify_URLRoutesToEngine proves the URL type routes to the real
+// urlVerifier (result is NOT the placeholder). The outcome is network
+// tolerant: a malformed URL is deterministically invalid, while a real URL
+// either verifies online or degrades to unreachable offline.
+func TestVerify_URLRoutesToEngine(t *testing.T) {
+	for _, in := range []string{"https://google.com", "https://example.com"} {
+		got := Verify(classifier.TypeURL, in)
+		t.Logf("url(%s) -> %+v", in, got)
+
+		if got.Status == "not_implemented" || got.Summary == "Verification engine not implemented yet." {
+			t.Fatalf("url type should route to urlVerifier, got placeholder: %+v", got)
+		}
+		if got.TrustScore < 0 || got.TrustScore > 100 {
+			t.Errorf("trustScore %d out of [0,100]", got.TrustScore)
+		}
 	}
 }
 
