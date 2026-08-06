@@ -10,6 +10,9 @@ func assertCompanyResult(t *testing.T, v Result) {
 	if v.TrustScore < 0 || v.TrustScore > 100 {
 		t.Errorf("trustScore %d out of [0,100]", v.TrustScore)
 	}
+	if len(v.Evidence) == 0 {
+		t.Errorf("result carries no evidence: %+v", v)
+	}
 	switch v.Status {
 	case "verified":
 		if v.TrustScore < 80 {
@@ -57,6 +60,7 @@ func TestCompanyVerifier_Invalid(t *testing.T) {
 			v.Summary != "Invalid company name." {
 			t.Errorf("Verify(%q) = %+v, want invalid/0/Invalid company name.", in, v)
 		}
+		assertEvidenceLabels(t, v, []string{"Valid Company Name"})
 	}
 }
 
@@ -67,5 +71,6 @@ func TestCompanyVerifier_Empty(t *testing.T) {
 			v.Summary != "Invalid company name." {
 			t.Errorf("Verify(%q) = %+v, want invalid/0/Invalid company name.", in, v)
 		}
+		assertEvidenceLabels(t, v, []string{"Valid Company Name"})
 	}
 }

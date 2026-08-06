@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pamierin/trustcheck/apps/api/internal/classifier"
+	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 	"github.com/pamierin/trustcheck/apps/api/internal/verifier"
 )
 
@@ -14,11 +15,12 @@ type verifyRequest struct {
 }
 
 type verifyResponse struct {
-	Input      string `json:"input"`
-	Type       string `json:"type"`
-	Status     string `json:"status"`
-	TrustScore int    `json:"trustScore"`
-	Summary    string `json:"summary"`
+	Input      string             `json:"input"`
+	Type       string             `json:"type"`
+	Status     string             `json:"status"`
+	TrustScore int                `json:"trustScore"`
+	Summary    string             `json:"summary"`
+	Evidence   []scoring.Evidence `json:"evidence"`
 }
 
 // corsMiddleware enables cross-origin requests from the allowed frontend
@@ -79,6 +81,7 @@ func main() {
 			Status:     res.Status,
 			TrustScore: res.TrustScore,
 			Summary:    res.Summary,
+			Evidence:   res.Evidence,
 		})
 	})
 

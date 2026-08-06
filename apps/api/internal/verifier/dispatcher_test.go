@@ -17,29 +17,34 @@ import (
 func TestVerify_RoutesToCorrectVerifier(t *testing.T) {
 
 	cases := []struct {
-		name string
-		typ  classifier.InputType
-		in   string
-		want Result
+		name       string
+		typ        classifier.InputType
+		in         string
+		want       Result
+		wantLabels []string
 	}{
 		{"domain -> domainVerifier", classifier.TypeDomain, "nonexistent.invalid",
-			Result{Status: "unreachable", TrustScore: 15, Summary: "Domain does not resolve."}},
+			Result{Status: "unreachable", TrustScore: 15, Summary: "Domain does not resolve."},
+			[]string{"DNS Lookup"}},
 		{"ipv4 -> ipVerifier", classifier.TypeIPv4, "8.8.8.8",
-			Result{Status: "verified", TrustScore: 70, Summary: "Globally routable IP address."}},
+			Result{Status: "verified", TrustScore: 70, Summary: "Globally routable IP address."},
+			[]string{"Global Unicast"}},
 		{"ipv6 -> ipVerifier", classifier.TypeIPv6, "::1",
-			Result{Status: "local", TrustScore: 100, Summary: "Loopback address."}},
+			Result{Status: "local", TrustScore: 100, Summary: "Loopback address."},
+			[]string{"Loopback"}},
 		{"phone -> phoneVerifier", classifier.TypePhone, "+15551234567",
-			Result{Status: "verified", TrustScore: 80, Summary: "Phone number format is valid (USA/Canada)."}},
+			Result{Status: "verified", TrustScore: 80, Summary: "Phone number format is valid (USA/Canada)."},
+			[]string{"Normalized", "Country Detected"}},
 		{"unknown -> unknownVerifier", classifier.TypeUnknown, "???",
-			Result{Status: "unknown", TrustScore: 10, Summary: "Unable to classify the input."}},
+			Result{Status: "unknown", TrustScore: 10, Summary: "Unable to classify the input."},
+			[]string{"No Suggestion"}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := Verify(tc.typ, tc.in)
-			if got != tc.want {
-				t.Errorf("Verify(%s, %q) = %+v, want %+v", tc.typ, tc.in, got, tc.want)
-			}
+			assertResult(t, got, tc.want)
+			assertEvidenceLabels(t, got, tc.wantLabels)
 		})
 	}
 }

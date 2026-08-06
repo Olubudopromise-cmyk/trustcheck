@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 )
 
 // nonAlnumRegex strips everything but lowercase letters and digits when
@@ -39,37 +41,40 @@ func (companyVerifier) Verify(input string) Result {
 	// 1. Normalize.
 	name := strings.Join(strings.Fields(strings.TrimSpace(input)), " ")
 	if name == "" {
-		return Result{Status: "invalid", TrustScore: 0, Summary: "Invalid company name."}
+		b := scoring.New()
+		b.Fail("Valid Company Name", 0)
+		return Result{Status: "invalid", TrustScore: 0, Summary: "Invalid company name.", Evidence: b.Evidence()}
 	}
 
 	// 2. Obvious garbage.
 	if isObviousGarbage(name) {
-		return Result{Status: "invalid", TrustScore: 0, Summary: "Invalid company name."}
+		b := scoring.New()
+		b.Fail("Valid Company Name", 0)
+		return Result{Status: "invalid", TrustScore: 0, Summary: "Invalid company name.", Evidence: b.Evidence()}
 	}
 
 	// 3. Legal suffix confidence bonus.
-	score := 40
+	score := scoring.New()
+	score.Pass("Company Name", scoring.CompanyBaseScore)
 	if hasLegalSuffix(name) {
-		score += 10
+		score.Pass("Legal Suffix", scoring.CompanySuffixBonus)
 	}
 
 	// 4-5. Infer and verify the official website candidate.
 	if domain := inferCompanyDomain(name); domain != "" {
+		score.Info("Website Inferred")
 		r := VerifyDomain(domain)
 		if r.Status != "unreachable" {
-			score += 20 // domain resolves
+			score.Pass("Website Resolves", scoring.ResolveBonus) // domain resolves
 		}
 		if r.Status == "verified" {
-			score += 20 // verified HTTPS
+			score.Pass("Website Verified", scoring.HTTPSBonus) // verified HTTPS
 		}
 	}
 
-	// 6. Clamp and interpret.
-	if score > 100 {
-		score = 100
-	}
-	status, summary := interpretCompany(score)
-	return Result{Status: status, TrustScore: score, Summary: summary}
+	// 6. Interpret (the Builder already clamped to [0, 100]).
+	status, summary := interpretCompany(score.Score())
+	return Result{Status: status, TrustScore: score.Score(), Summary: summary, Evidence: score.Evidence()}
 }
 
 // isObviousGarbage reports whether a name contains no letters at all, i.e.
@@ -113,9 +118,9 @@ func inferCompanyDomain(name string) string {
 // interpretCompany maps the final score to a status + human summary.
 func interpretCompany(score int) (status, summary string) {
 	switch {
-	case score >= 80:
+	case score >= scoring.HighConfidenceScore:
 		return "verified", "Recognized company with an active website."
-	case score >= 50:
+	case score >= scoring.WarningThreshold:
 		return "warning", "Company name appears valid but could not be fully verified."
 	default:
 		return "invalid", "Unable to verify company."

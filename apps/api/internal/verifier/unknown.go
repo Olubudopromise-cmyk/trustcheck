@@ -1,6 +1,10 @@
 package verifier
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
+)
 
 // unknownVerifier implements the Verifier interface for unclassified inputs.
 // Instead of a dead-end "not implemented" result it suggests a likely valid
@@ -24,16 +28,21 @@ func (unknownVerifier) Verify(input string) Result {
 	// 1. Normalize.
 	in := strings.Join(strings.Fields(strings.TrimSpace(input)), " ")
 	if in == "" {
-		return Result{Status: "invalid", TrustScore: 0, Summary: "No input provided."}
+		b := scoring.New()
+		b.Fail("Input Provided", 0)
+		return Result{Status: "invalid", TrustScore: 0, Summary: "No input provided.", Evidence: b.Evidence()}
 	}
 	low := strings.ToLower(in)
 
 	// 2. Bare domain missing a TLD.
 	if isBareDomainToken(low) {
+		b := scoring.New()
+		b.Pass("Suggestion Generated", scoring.UnknownSuggestionScore)
 		return Result{
 			Status:     "suggestion",
-			TrustScore: 20,
+			TrustScore: b.Score(),
 			Summary:    "Did you mean the domain " + in + ".com?",
+			Evidence:   b.Evidence(),
 		}
 	}
 
@@ -58,7 +67,14 @@ func (unknownVerifier) Verify(input string) Result {
 	}
 
 	// 7. Nothing matched.
-	return Result{Status: "unknown", TrustScore: 10, Summary: "Unable to classify the input."}
+	b := scoring.New()
+	b.Warning("No Suggestion", scoring.NoSuggestionScore)
+	return Result{
+		Status:     "unknown",
+		TrustScore: b.Score(),
+		Summary:    scoring.StatusSummary("unknown"),
+		Evidence:   b.Evidence(),
+	}
 }
 
 // isBareDomainToken reports whether the input is a single word made of
@@ -126,8 +142,15 @@ func repairURL(in string) (string, bool) {
 	return scheme + "://" + rest, true
 }
 
-// suggestion builds a suggestion result (score 20, status "suggestion") with
-// the suggestion embedded in the summary.
+// suggestion builds a suggestion result with the suggestion embedded in the
+// summary.
 func suggestion(text string) Result {
-	return Result{Status: "suggestion", TrustScore: 20, Summary: "Did you mean " + text + "?"}
+	b := scoring.New()
+	b.Pass("Suggestion Generated", scoring.UnknownSuggestionScore)
+	return Result{
+		Status:     "suggestion",
+		TrustScore: b.Score(),
+		Summary:    "Did you mean " + text + "?",
+		Evidence:   b.Evidence(),
+	}
 }

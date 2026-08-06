@@ -3,6 +3,8 @@ package verifier
 import (
 	"regexp"
 	"strings"
+
+	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 )
 
 // phoneFormatRegex strips the formatting characters that may appear inside an
@@ -50,23 +52,33 @@ func (phoneVerifier) Verify(input string) Result {
 
 	// 2. Validate.
 	if !phoneE164Regex.MatchString(normalized) {
-		return Result{Status: "invalid", TrustScore: 0, Summary: "Invalid phone number."}
+		b := scoring.New()
+		b.Fail("Valid E.164 Format", 0)
+		return Result{Status: "invalid", TrustScore: 0, Summary: "Invalid phone number.", Evidence: b.Evidence()}
 	}
 
 	// 3. Country detection (drop the leading "+").
 	if name, ok := detectCountry(normalized[1:]); ok {
+		b := scoring.New()
+		b.Info("Normalized")
+		b.Pass("Country Detected", scoring.PhoneVerifiedScore)
 		return Result{
 			Status:     "verified",
-			TrustScore: 80,
+			TrustScore: b.Score(),
 			Summary:    "Phone number format is valid (" + name + ").",
+			Evidence:   b.Evidence(),
 		}
 	}
 
 	// 4. Unknown country.
+	b := scoring.New()
+	b.Info("Normalized")
+	b.Warning("Unknown Country", scoring.PhoneUnknownScore)
 	return Result{
 		Status:     "warning",
-		TrustScore: 60,
+		TrustScore: b.Score(),
 		Summary:    "Phone number format is valid but country is unknown.",
+		Evidence:   b.Evidence(),
 	}
 }
 

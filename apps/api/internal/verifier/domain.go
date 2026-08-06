@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 )
 
 // probeTimeout is the per-attempt timeout for the HTTPS / HTTP checks.
@@ -16,11 +18,24 @@ const probeTimeout = 5 * time.Second
 func statusBand(code int) int {
 	switch {
 	case code >= 200 && code <= 399:
-		return 20
+		return scoring.StatusOKBonus
 	case code >= 400 && code <= 499:
-		return 10
+		return scoring.StatusClientBonus
 	default:
-		return 0
+		return scoring.StatusServerBonus
+	}
+}
+
+// addStatusBand records the HTTP status code check as evidence, contributing
+// the same points as statusBand.
+func addStatusBand(b *scoring.Builder, code int) {
+	switch {
+	case code >= 200 && code <= 399:
+		b.Pass("HTTP Status OK", scoring.StatusOKBonus)
+	case code >= 400 && code <= 499:
+		b.Warning("HTTP Client Error", scoring.StatusClientBonus)
+	default:
+		b.Info("HTTP Server Error")
 	}
 }
 
@@ -64,14 +79,19 @@ func VerifyDomain(domain string) Result {
 		statusWarning     = "warning"
 	)
 
+	score := scoring.New()
+
 	// 1. DNS lookup.
 	if ips, err := net.LookupHost(domain); err != nil || len(ips) == 0 {
+		score.Fail("DNS Lookup", 0)
 		return Result{
 			Status:     statusUnreachable,
-			TrustScore: 15,
+			TrustScore: scoring.UnreachableScore,
 			Summary:    "Domain does not resolve.",
+			Evidence:   score.Evidence(),
 		}
 	}
+	score.Pass("DNS Resolves", 0)
 
 	httpsClient := &http.Client{
 		Timeout:   probeTimeout,
@@ -95,7 +115,7 @@ func VerifyDomain(domain string) Result {
 		statusCode = resp.StatusCode
 		tlsState = resp.TLS
 		if tlsState != nil && len(tlsState.PeerCertificates) > 0 {
-				if isCertExpired(tlsState.PeerCertificates[0]) {
+			if isCertExpired(tlsState.PeerCertificates[0]) {
 				certExpired = true
 			} else {
 				certValid = true
@@ -113,32 +133,25 @@ func VerifyDomain(domain string) Result {
 		}
 	}
 
-	// 2-5. Accumulate the score.
-	score := 0
+	// 2-5. Accumulate the score with the shared Builder (auto-clamps).
 	if httpsOK {
-		score += 20 // HTTPS available
+		score.Pass("HTTPS Available", scoring.HTTPSBonus)
 		if tlsState != nil && len(tlsState.PeerCertificates) > 0 {
-			score += 20 // certificate present
+			score.Pass("TLS Certificate Present", scoring.ValidCertBonus)
 			if certExpired {
-				score -= 30
+				score.Fail("TLS Certificate Expired", -scoring.ExpiredCertPenalty)
 			}
 		}
-		score += statusBand(statusCode)
+		addStatusBand(score, statusCode)
 	} else if httpOK {
-		score += 10 // HTTP fallback only
-		score += statusBand(statusCode)
-	}
-
-	if score < 0 {
-		score = 0
-	} else if score > 100 {
-		score = 100
+		score.Pass("HTTP Fallback", scoring.HTTPFallbackBonus)
+		addStatusBand(score, statusCode)
 	}
 
 	// Status + summary follow the spec's interpretation.
 	var status, summary string
 	switch {
-	case httpsOK && certValid && statusBand(statusCode) == 20:
+	case httpsOK && certValid && statusBand(statusCode) == scoring.StatusOKBonus:
 		status = statusVerified
 		summary = "Domain resolves, HTTPS available, certificate valid."
 	case !httpsOK && httpOK:
@@ -152,5 +165,5 @@ func VerifyDomain(domain string) Result {
 		summary = "Domain resolves, but verification is inconclusive."
 	}
 
-	return Result{Status: status, TrustScore: score, Summary: summary}
+	return Result{Status: status, TrustScore: score.Score(), Summary: summary, Evidence: score.Evidence()}
 }

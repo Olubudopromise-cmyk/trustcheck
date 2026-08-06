@@ -25,6 +25,9 @@ func assertReachableOrUnreachable(t *testing.T, v Result) {
 	default:
 		t.Errorf("unexpected status %q (%+v)", v.Status, v)
 	}
+	if len(v.Evidence) == 0 {
+		t.Errorf("result carries no evidence: %+v", v)
+	}
 }
 
 func TestEmailVerifier_Malformed(t *testing.T) {
@@ -34,6 +37,7 @@ func TestEmailVerifier_Malformed(t *testing.T) {
 			v.Summary != "Invalid email format." {
 			t.Errorf("Verify(%q) = %+v, want invalid/0/Invalid email format.", in, v)
 		}
+		assertEvidenceLabels(t, v, []string{"Valid Syntax"})
 	}
 }
 
@@ -43,6 +47,7 @@ func TestEmailVerifier_NonexistentDomain(t *testing.T) {
 		v.Summary != "Email domain cannot receive mail." {
 		t.Errorf("got %+v, want unreachable/15/Email domain cannot receive mail.", v)
 	}
+	assertEvidenceLabels(t, v, []string{"Valid Syntax", "Mail Domain"})
 }
 
 func TestEmailVerifier_ValidGmail(t *testing.T) {

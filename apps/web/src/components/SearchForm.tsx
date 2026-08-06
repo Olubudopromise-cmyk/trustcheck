@@ -1,5 +1,7 @@
 'use client';
 
+import { memo } from 'react';
+
 interface SearchFormProps {
   value: string;
   onChange: (value: string) => void;
@@ -7,7 +9,7 @@ interface SearchFormProps {
   loading: boolean;
 }
 
-export default function SearchForm({ value, onChange, onSubmit, loading }: SearchFormProps) {
+function SearchForm({ value, onChange, onSubmit, loading }: SearchFormProps) {
   const canSubmit = value.trim().length > 0 && !loading;
 
   return (
@@ -36,7 +38,7 @@ export default function SearchForm({ value, onChange, onSubmit, loading }: Searc
       <button
         type="submit"
         disabled={!canSubmit}
-        className="relative w-full rounded-xl bg-cyan-500 py-4 text-base font-medium text-white shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-600 disabled:cursor-not-allowed disabled:opacity-60"
+        className="relative w-full rounded-xl bg-cyan-500 py-4 text-base font-medium text-white shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 ring-offset-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:ring-offset-slate-950"
       >
         {loading ? (
           <span className="flex items-center justify-center gap-2">
@@ -69,3 +71,5 @@ export default function SearchForm({ value, onChange, onSubmit, loading }: Searc
     </form>
   );
 }
+
+export default memo(SearchForm);

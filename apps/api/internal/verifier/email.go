@@ -4,15 +4,17 @@ import (
 	"net"
 	"net/mail"
 	"strings"
+
+	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 )
 
 // disposableDomains is a small, internal blocklist of throwaway email
 // providers. Matching is exact (case-insensitive) on the email's domain.
 var disposableDomains = map[string]bool{
-	"mailinator.com":     true,
-	"10minutemail.com":   true,
-	"guerrillamail.com":  true,
-	"tempmail.com":       true,
+	"mailinator.com":    true,
+	"10minutemail.com":  true,
+	"guerrillamail.com": true,
+	"tempmail.com":      true,
 }
 
 // emailVerifier implements the Verifier interface for email inputs.
@@ -29,73 +31,71 @@ type emailVerifier struct{}
 //  6. Clamp to [0, 100]; map to verified(80-100) / warning(50-79) / invalid(0-49).
 func (emailVerifier) Verify(input string) Result {
 	const (
-		invalid        = "invalid"
-		unreachable    = "unreachable"
-		verified       = "verified"
-		warning        = "warning"
+		invalid     = "invalid"
+		unreachable = "unreachable"
+		verified    = "verified"
+		warning     = "warning"
 	)
 
 	addr, err := mail.ParseAddress(input)
 	if err != nil || strings.TrimSpace(input) != addr.Address || addr.Name != "" {
-		return Result{Status: invalid, TrustScore: 0, Summary: "Invalid email format."}
+		b := scoring.New()
+		b.Fail("Valid Syntax", 0)
+		return Result{Status: invalid, TrustScore: 0, Summary: "Invalid email format.", Evidence: b.Evidence()}
 	}
 
 	parts := strings.SplitN(addr.Address, "@", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return Result{Status: invalid, TrustScore: 0, Summary: "Invalid email format."}
+		b := scoring.New()
+		b.Fail("Valid Syntax", 0)
+		return Result{Status: invalid, TrustScore: 0, Summary: "Invalid email format.", Evidence: b.Evidence()}
 	}
 	domain := strings.ToLower(parts[1])
 
+	// 3-5. Accumulate mail + disposable + web-presence scores with the shared
+	// Builder, then average with the domain score. The Builder clamps the sum;
+	// dividing afterwards yields the same result as the historical clamp-after
+	// average because the sum never leaves [0, 100] for reachable emails.
+	score := scoring.New()
+	score.Pass("Valid Syntax", 0)
+
 	// 3. DNS MX (and A/AAAA) lookup.
-	emailScore, reachable := scoreDomainMail(domain)
-	if !reachable {
+	if mxs, err := net.LookupMX(domain); err == nil && len(mxs) > 0 {
+		score.Pass("MX Record", scoring.MXBonus)
+	} else if ips, err := net.LookupHost(domain); err == nil && len(ips) > 0 {
+		score.Pass("A/AAAA Record", scoring.ARecordBonus)
+	} else {
+		score.Fail("Mail Domain", 0)
 		return Result{
 			Status:     unreachable,
-			TrustScore: 15,
+			TrustScore: scoring.UnreachableScore,
 			Summary:    "Email domain cannot receive mail.",
+			Evidence:   score.Evidence(),
 		}
 	}
 
 	// 4. Disposable provider penalty.
 	if disposableDomains[domain] {
-		emailScore -= 40
+		score.Fail("Disposable Provider", -scoring.DisposablePenalty)
 	}
 
 	// 5. Reuse the domain engine for the web-presence score.
-	domainScore := VerifyDomain(domain).TrustScore
+	score.Pass("Website Verification", VerifyDomain(domain).TrustScore)
+	total := score.Score() / 2
 
-	score := (domainScore + emailScore) / 2
-	if score < 0 {
-		score = 0
-	} else if score > 100 {
-		score = 100
-	}
-
-	status, summary := interpretEmail(score)
+	status, summary := interpretEmail(total)
 	if disposableDomains[domain] {
 		summary = "Disposable email provider detected."
 	}
-	return Result{Status: status, TrustScore: score, Summary: summary}
-}
-
-// scoreDomainMail returns the mail-delivery score and whether the domain is
-// mail-reachable (has MX or A/AAAA records).
-func scoreDomainMail(domain string) (score int, reachable bool) {
-	if mxs, err := net.LookupMX(domain); err == nil && len(mxs) > 0 {
-		return 40, true
-	}
-	if ips, err := net.LookupHost(domain); err == nil && len(ips) > 0 {
-		return 20, true
-	}
-	return 0, false
+	return Result{Status: status, TrustScore: total, Summary: summary, Evidence: score.Evidence()}
 }
 
 // interpretEmail maps a final score to a status + human summary.
 func interpretEmail(score int) (status, summary string) {
 	switch {
-	case score >= 80:
+	case score >= scoring.HighConfidenceScore:
 		return "verified", "Email domain receives mail and has a valid web presence."
-	case score >= 50:
+	case score >= scoring.WarningThreshold:
 		return "warning", "Email domain receives mail; web presence partially verified."
 	default:
 		return "invalid", "Email domain receives mail but failed verification."

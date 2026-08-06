@@ -25,9 +25,8 @@ func TestUnknownVerifier_Suggestions(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := unknownVerifier{}.Verify(tc.in)
-			if got != tc.want {
-				t.Errorf("Verify(%q) = %+v, want %+v", tc.in, got, tc.want)
-			}
+			assertResult(t, got, tc.want)
+			assertEvidenceLabels(t, got, []string{"Suggestion Generated"})
 		})
 	}
 }
@@ -49,9 +48,8 @@ func TestUnknownVerifier_Whitespace(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := unknownVerifier{}.Verify(tc.in)
-			if got != tc.want {
-				t.Errorf("Verify(%q) = %+v, want %+v", tc.in, got, tc.want)
-			}
+			assertResult(t, got, tc.want)
+			assertEvidenceLabels(t, got, []string{"Suggestion Generated"})
 		})
 	}
 }
@@ -63,6 +61,7 @@ func TestUnknownVerifier_NoSuggestion(t *testing.T) {
 			got.Summary != "Unable to classify the input." {
 			t.Errorf("Verify(%q) = %+v, want unknown/10/Unable to classify the input.", in, got)
 		}
+		assertEvidenceLabels(t, got, []string{"No Suggestion"})
 	}
 }
 
@@ -73,5 +72,6 @@ func TestUnknownVerifier_Empty(t *testing.T) {
 			got.Summary != "No input provided." {
 			t.Errorf("Verify(%q) = %+v, want invalid/0/No input provided.", in, got)
 		}
+		assertEvidenceLabels(t, got, []string{"Input Provided"})
 	}
 }

@@ -8,9 +8,12 @@
 // the endpoint.
 package verifier
 
+import "github.com/pamierin/trustcheck/apps/api/internal/scoring"
+
 // Result is the outcome of a verification engine.
 type Result struct {
 	Status     string
 	TrustScore int
 	Summary    string
+	Evidence   []scoring.Evidence
 }

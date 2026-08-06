@@ -26,6 +26,7 @@ func TestPhoneVerifier_Valid(t *testing.T) {
 			if v.Status != "verified" || v.TrustScore != 80 || v.Summary != tc.want {
 				t.Errorf("Verify(%q) = %+v, want verified/80/%q", tc.in, v, tc.want)
 			}
+			assertEvidenceLabels(t, v, []string{"Normalized", "Country Detected"})
 		})
 	}
 }
@@ -51,6 +52,7 @@ func TestPhoneVerifier_Normalization(t *testing.T) {
 			if v.Status != "verified" || v.TrustScore != 80 || v.Summary != tc.want {
 				t.Errorf("Verify(%q) = %+v, want verified/80/%q", tc.in, v, tc.want)
 			}
+			assertEvidenceLabels(t, v, []string{"Normalized", "Country Detected"})
 		})
 	}
 }
@@ -76,6 +78,7 @@ func TestPhoneVerifier_Invalid(t *testing.T) {
 			if v.Status != "invalid" || v.TrustScore != 0 || v.Summary != "Invalid phone number." {
 				t.Errorf("Verify(%q) = %+v, want invalid/0/Invalid phone number.", tc.in, v)
 			}
+			assertEvidenceLabels(t, v, []string{"Valid E.164 Format"})
 		})
 	}
 }
@@ -89,5 +92,6 @@ func TestPhoneVerifier_UnknownCountry(t *testing.T) {
 			v.Summary != "Phone number format is valid but country is unknown." {
 			t.Errorf("Verify(%q) = %+v, want warning/60/unknown summary", in, v)
 		}
+		assertEvidenceLabels(t, v, []string{"Normalized", "Unknown Country"})
 	}
 }

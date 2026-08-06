@@ -71,7 +71,8 @@ export default function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label="Toggle light and dark theme"
-      className="rounded-lg border border-slate-300 bg-white/70 p-2 text-slate-700 shadow-sm backdrop-blur transition hover:bg-white dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-200"
+      aria-pressed={dark}
+      className="rounded-lg border border-slate-300 bg-white/70 p-2 text-slate-700 shadow-sm backdrop-blur transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-200 dark:hover:bg-slate-800"
     >
       {dark ? <MoonIcon /> : <SunIcon />}
     </button>

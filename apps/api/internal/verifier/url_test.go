@@ -28,6 +28,7 @@ func TestURLVerifier_Invalid(t *testing.T) {
 			if v.Status != "invalid" || v.TrustScore != 0 || v.Summary != "Invalid URL." {
 				t.Errorf("Verify(%q) = %+v, want invalid/0/Invalid URL.", tc.in, v)
 			}
+			assertEvidenceLabels(t, v, []string{"Valid URL"})
 		})
 	}
 }
@@ -45,6 +46,7 @@ func TestURLVerifier_UnsupportedScheme(t *testing.T) {
 		if v.Status != "invalid" || v.TrustScore != 0 || v.Summary != "Invalid URL." {
 			t.Errorf("Verify(%q) = %+v, want invalid/0/Invalid URL.", in, v)
 		}
+		assertEvidenceLabels(t, v, []string{"Valid URL"})
 	}
 }
 
@@ -78,12 +80,18 @@ func TestURLVerifier_ServerCases(t *testing.T) {
 		wantStatus string
 		wantScore  int
 		wantSum    string
+		wantLabels []string
 	}{
-		{"https valid", tlsSrv.URL, "verified", 85, "HTTPS available with a valid certificate."},
-		{"https redirect", tlsSrv.URL + "/redirect", "verified", 75, "HTTPS available with a valid certificate."},
-		{"https client error", tlsSrv.URL + "/client-error", "warning", 75, "Site responded with a client error."},
-		{"https server error", tlsSrv.URL + "/server-error", "warning", 65, "Site responded with a server error."},
-		{"http only", plain.URL, "warning", 60, "Site is reachable over HTTP only."},
+		{"https valid", tlsSrv.URL, "verified", 85, "HTTPS available with a valid certificate.",
+			[]string{"Valid URL", "HTTP Status OK", "HTTPS Available", "Valid TLS Certificate"}},
+		{"https redirect", tlsSrv.URL + "/redirect", "verified", 75, "HTTPS available with a valid certificate.",
+			[]string{"Valid URL", "HTTP Status OK", "HTTPS Available", "Valid TLS Certificate", "Redirect Detected"}},
+		{"https client error", tlsSrv.URL + "/client-error", "warning", 75, "Site responded with a client error.",
+			[]string{"Valid URL", "HTTP Client Error", "HTTPS Available", "Valid TLS Certificate"}},
+		{"https server error", tlsSrv.URL + "/server-error", "warning", 65, "Site responded with a server error.",
+			[]string{"Valid URL", "HTTP Server Error", "HTTPS Available", "Valid TLS Certificate"}},
+		{"http only", plain.URL, "warning", 60, "Site is reachable over HTTP only.",
+			[]string{"Valid URL", "HTTP Status OK"}},
 	}
 
 	for _, tc := range cases {
@@ -93,6 +101,7 @@ func TestURLVerifier_ServerCases(t *testing.T) {
 				t.Errorf("Verify(%q) = %+v, want %s/%d/%q",
 					tc.in, v, tc.wantStatus, tc.wantScore, tc.wantSum)
 			}
+			assertEvidenceLabels(t, v, tc.wantLabels)
 		})
 	}
 }
@@ -105,6 +114,7 @@ func TestURLVerifier_UnreachableHost(t *testing.T) {
 		v.Summary != "URL host does not resolve." {
 		t.Errorf("got %+v, want unreachable/15/URL host does not resolve.", v)
 	}
+	assertEvidenceLabels(t, v, []string{"DNS Lookup"})
 }
 
 // TestURLVerifier_Localhost: localhost resolves (loopback) but serves no web
@@ -118,6 +128,9 @@ func TestURLVerifier_Localhost(t *testing.T) {
 	}
 	if v.TrustScore < 0 || v.TrustScore > 100 {
 		t.Errorf("trustScore %d out of [0,100]", v.TrustScore)
+	}
+	if len(v.Evidence) == 0 {
+		t.Errorf("localhost result carries no evidence: %+v", v)
 	}
 }
 
@@ -144,5 +157,8 @@ func TestURLVerifier_RealSite(t *testing.T) {
 		}
 	default:
 		t.Errorf("unexpected status %q (%+v)", v.Status, v)
+	}
+	if len(v.Evidence) == 0 {
+		t.Errorf("result carries no evidence: %+v", v)
 	}
 }

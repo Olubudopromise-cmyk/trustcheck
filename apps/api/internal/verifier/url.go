@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 )
 
 const (
@@ -16,7 +18,7 @@ const (
 
 // maxRedirectsPenalty caps the redirect penalty so that a pathological chain
 // of hops cannot zero out an otherwise healthy site.
-const maxRedirectsPenalty = 20
+const maxRedirectsPenalty = scoring.MaxRedirectPenalty
 
 // urlVerifier implements the Verifier interface for URL inputs.
 type urlVerifier struct{}
@@ -43,21 +45,28 @@ func (urlVerifier) Verify(input string) Result {
 	// 1. Parse.
 	u, err := url.Parse(strings.TrimSpace(input))
 	if err != nil || u.Scheme == "" || u.Host == "" || u.Hostname() == "" {
-		return Result{Status: urlStatusInvalid, TrustScore: 0, Summary: "Invalid URL."}
+		b := scoring.New()
+		b.Fail("Valid URL", 0)
+		return Result{Status: urlStatusInvalid, TrustScore: 0, Summary: "Invalid URL.", Evidence: b.Evidence()}
 	}
 
 	// 2. Scheme.
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "http" && scheme != "https" {
-		return Result{Status: urlStatusInvalid, TrustScore: 0, Summary: "Invalid URL."}
+		b := scoring.New()
+		b.Fail("Valid URL", 0)
+		return Result{Status: urlStatusInvalid, TrustScore: 0, Summary: "Invalid URL.", Evidence: b.Evidence()}
 	}
 
 	// 3. Host existence, reusing the domain engine.
 	if VerifyDomain(u.Hostname()).Status == urlStatusUnreachable {
+		b := scoring.New()
+		b.Fail("DNS Lookup", 0)
 		return Result{
 			Status:     urlStatusUnreachable,
-			TrustScore: 15,
+			TrustScore: scoring.UnreachableScore,
 			Summary:    "URL host does not resolve.",
+			Evidence:   b.Evidence(),
 		}
 	}
 
@@ -81,10 +90,13 @@ func (urlVerifier) Verify(input string) Result {
 	resp, err := headOrGet(client, u.String())
 	if err != nil {
 		// Host resolved but no HTTP response (refused / timeout / reset).
+		b := scoring.New()
+		b.Fail("HTTP Request", 0)
 		return Result{
 			Status:     urlStatusWarning,
-			TrustScore: 25,
+			TrustScore: scoring.URLRequestFailedScore,
 			Summary:    "URL host could not be reached.",
+			Evidence:   b.Evidence(),
 		}
 	}
 	defer resp.Body.Close()
@@ -105,34 +117,32 @@ func (urlVerifier) Verify(input string) Result {
 		}
 	}
 
-	// 7. Score.
-	score := 40 // valid URL +10, host resolves +10, request OK +20
-	score += statusBand(statusCode)
+	// 7. Score with the shared Builder (auto-clamps).
+	score := scoring.New()
+	score.Pass("Valid URL", scoring.URLBaseScore) // valid URL + host resolves + request OK
+	addStatusBand(score, statusCode)
 	if scheme == "https" {
-		score += 15
+		score.Pass("HTTPS Available", scoring.TLSBonus)
 		switch {
 		case certValid:
-			score += 10
+			score.Pass("Valid TLS Certificate", scoring.URLValidCertBonus)
 		case certExpired:
-			score -= 30
+			score.Fail("TLS Certificate Expired", -scoring.ExpiredCertPenalty)
 		}
 		if finalURL != nil && strings.ToLower(finalURL.Scheme) != "https" {
-			score -= 10 // redirected off HTTPS (TLS downgrade)
+			score.Warning("TLS Downgrade", -scoring.TLSDowngradePenalty) // redirected off HTTPS
 		}
 	}
-	penalty := redirects * 10
+	penalty := redirects * scoring.RedirectPenalty
 	if penalty > maxRedirectsPenalty {
 		penalty = maxRedirectsPenalty
 	}
-	score -= penalty
-	if score < 0 {
-		score = 0
-	} else if score > 100 {
-		score = 100
+	if penalty > 0 {
+		score.Warning("Redirect Detected", -penalty)
 	}
 
 	status, summary := summarizeURL(scheme, certValid, certExpired, statusCode)
-	return Result{Status: status, TrustScore: score, Summary: summary}
+	return Result{Status: status, TrustScore: score.Score(), Summary: summary, Evidence: score.Evidence()}
 }
 
 // summarizeURL maps the observed verification results to a status + summary.
