@@ -13,3 +13,8 @@ body {
   background: #0f172a;
   color: #f8fafc;
 }
+
+html {
+  scroll-behavior: smooth;
+  transition: color 0.2s, background-color 0.2s;
+}
