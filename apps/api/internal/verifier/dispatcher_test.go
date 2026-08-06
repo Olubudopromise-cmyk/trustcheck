@@ -12,8 +12,8 @@ import (
 // domain uses a ".invalid" host (RFC 2606, never resolves) so it
 // deterministically returns the domain engine's unreachable result -- proving
 // the domain route is taken and is NOT the placeholder. phone is deterministic
-// (no network) so it is asserted exactly. The remaining types (email and url
-// have their own routing tests below) hit the placeholder engine.
+// (no network) so it is asserted exactly. The remaining types (url, email and
+// company have their own routing tests below) hit the placeholder engine.
 func TestVerify_RoutesToCorrectVerifier(t *testing.T) {
 	const placeholderSummary = "Verification engine not implemented yet."
 
@@ -31,8 +31,6 @@ func TestVerify_RoutesToCorrectVerifier(t *testing.T) {
 			Result{Status: "local", TrustScore: 100, Summary: "Loopback address."}},
 		{"phone -> phoneVerifier", classifier.TypePhone, "+15551234567",
 			Result{Status: "verified", TrustScore: 80, Summary: "Phone number format is valid (USA/Canada)."}},
-		{"company -> placeholder", classifier.TypeCompany, "OpenAI",
-			Result{Status: "not_implemented", TrustScore: 0, Summary: placeholderSummary}},
 		{"unknown -> placeholder", classifier.TypeUnknown, "???",
 			Result{Status: "not_implemented", TrustScore: 0, Summary: placeholderSummary}},
 	}
@@ -67,6 +65,31 @@ func TestVerify_URLRoutesToEngine(t *testing.T) {
 
 		if got.Status == "not_implemented" || got.Summary == "Verification engine not implemented yet." {
 			t.Fatalf("url type should route to urlVerifier, got placeholder: %+v", got)
+		}
+		if got.TrustScore < 0 || got.TrustScore > 100 {
+			t.Errorf("trustScore %d out of [0,100]", got.TrustScore)
+		}
+	}
+}
+
+// TestVerify_CompanyRoutesToEngine proves the company type routes to the real
+// companyVerifier (result is NOT the placeholder). The outcome is network
+// tolerant: an obvious-garbage name is deterministically invalid, while a
+// recognized company verifies online or degrades to a lower band offline.
+func TestVerify_CompanyRoutesToEngine(t *testing.T) {
+	// Deterministic: a garbage name never touches the network.
+	got := Verify(classifier.TypeCompany, "???")
+	if got.Status != "invalid" || got.TrustScore != 0 ||
+		got.Summary != "Invalid company name." {
+		t.Errorf("garbage company = %+v, want invalid/0/Invalid company name.", got)
+	}
+
+	for _, in := range []string{"OpenAI", "Google", "Microsoft", "Flutterwave", "Paystack", "Amazon"} {
+		got := Verify(classifier.TypeCompany, in)
+		t.Logf("company(%s) -> %+v", in, got)
+
+		if got.Status == "not_implemented" || got.Summary == "Verification engine not implemented yet." {
+			t.Fatalf("company type should route to companyVerifier, got placeholder: %+v", got)
 		}
 		if got.TrustScore < 0 || got.TrustScore > 100 {
 			t.Errorf("trustScore %d out of [0,100]", got.TrustScore)

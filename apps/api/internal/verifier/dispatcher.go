@@ -38,7 +38,7 @@ var verifiers = map[classifier.InputType]Verifier{
 	classifier.TypeIPv4:    ipVerifier{},
 	classifier.TypeIPv6:    ipVerifier{},
 	classifier.TypePhone:   phoneVerifier{},
-	classifier.TypeCompany: placeholderVerifier{},
+	classifier.TypeCompany: companyVerifier{},
 	classifier.TypeUnknown: placeholderVerifier{},
 }
 
