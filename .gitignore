@@ -18,3 +18,9 @@ coverage/
 .vscode/settings.json
 
 .idea/
+
+# Go build output
+apps/api/api
+
+# TypeScript build info
+*.tsbuildinfo
