@@ -71,14 +71,7 @@ func main() {
 		}
 
 		detected := classifier.Detect(req.Input)
-		res := verifier.Result{
-			Status:     "classified",
-			TrustScore: 0,
-			Summary:    "Input classified successfully.",
-		}
-		if detected == classifier.TypeDomain {
-			res = verifier.VerifyDomain(req.Input)
-		}
+		res := verifier.Verify(detected, req.Input)
 
 		c.JSON(http.StatusOK, verifyResponse{
 			Input:      req.Input,
