@@ -1,0 +1,24 @@
+# End-of-line normalization
+* text=auto
+
+# Keep executable permissions
+*.sh text eol=lf
+
+# Force LF on scripts and config files
+*.js text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.go text eol=lf
+*.svg text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
