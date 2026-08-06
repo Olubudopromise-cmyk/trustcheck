@@ -11,17 +11,16 @@ import (
 //
 // domain uses a ".invalid" host (RFC 2606, never resolves) so it
 // deterministically returns the domain engine's unreachable result -- proving
-// the domain route is taken and is NOT the placeholder. phone is deterministic
-// (no network) so it is asserted exactly. The remaining types (url, email and
-// company have their own routing tests below) hit the placeholder engine.
+// the domain route is taken and is NOT the placeholder. ip, phone and unknown
+// are deterministic (no network) so they are asserted exactly. url, email and
+// company have their own network-tolerant routing tests below.
 func TestVerify_RoutesToCorrectVerifier(t *testing.T) {
-	const placeholderSummary = "Verification engine not implemented yet."
 
 	cases := []struct {
-		name    string
-		typ     classifier.InputType
-		in      string
-		want    Result
+		name string
+		typ  classifier.InputType
+		in   string
+		want Result
 	}{
 		{"domain -> domainVerifier", classifier.TypeDomain, "nonexistent.invalid",
 			Result{Status: "unreachable", TrustScore: 15, Summary: "Domain does not resolve."}},
@@ -31,8 +30,8 @@ func TestVerify_RoutesToCorrectVerifier(t *testing.T) {
 			Result{Status: "local", TrustScore: 100, Summary: "Loopback address."}},
 		{"phone -> phoneVerifier", classifier.TypePhone, "+15551234567",
 			Result{Status: "verified", TrustScore: 80, Summary: "Phone number format is valid (USA/Canada)."}},
-		{"unknown -> placeholder", classifier.TypeUnknown, "???",
-			Result{Status: "not_implemented", TrustScore: 0, Summary: placeholderSummary}},
+		{"unknown -> unknownVerifier", classifier.TypeUnknown, "???",
+			Result{Status: "unknown", TrustScore: 10, Summary: "Unable to classify the input."}},
 	}
 
 	for _, tc := range cases {
