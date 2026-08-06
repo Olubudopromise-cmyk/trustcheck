@@ -1,14 +1,24 @@
 package main
 
 import (
+	"context"
+	_ "embed"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pamierin/trustcheck/apps/api/internal/classifier"
+	"github.com/pamierin/trustcheck/apps/api/internal/docs"
+	"github.com/pamierin/trustcheck/apps/api/internal/logging"
+	"github.com/pamierin/trustcheck/apps/api/internal/ratelimit"
 	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 	"github.com/pamierin/trustcheck/apps/api/internal/verifier"
+	"github.com/swaggest/swgui/v5emb"
 )
+
+//go:embed openapi.yaml
+var openapiDoc []byte
 
 type verifyRequest struct {
 	Input string `json:"input"`
@@ -51,7 +61,18 @@ func corsMiddleware() gin.HandlerFunc {
 }
 
 func main() {
-	r := gin.Default()
+	logger := logging.New()
+
+	limiter := ratelimit.New(ratelimit.Options{
+		Rate:  1, // 60 requests per minute
+		Burst: 20,
+	})
+	limiter.StartCleanup(context.Background(), time.Minute, 10*time.Minute)
+
+	r := gin.New()
+	r.Use(logging.RequestID())
+	r.Use(logging.RequestLogger(logger))
+	r.Use(logging.Recovery())
 	r.Use(corsMiddleware())
 
 	r.GET("/health", func(c *gin.Context) {
@@ -61,7 +82,16 @@ func main() {
 		})
 	})
 
-	r.POST("/verify", func(c *gin.Context) {
+	r.GET(docs.OpenAPIPath, func(c *gin.Context) {
+		c.Data(http.StatusOK, docs.YAMLContentType(), openapiDoc)
+	})
+
+	swaggerUI := v5emb.New(docs.SwaggerUITitle, docs.OpenAPIPath, docs.DocsPath)
+
+	r.GET(docs.DocsPath, gin.WrapH(swaggerUI))
+	r.GET(docs.DocsPath+"/*any", gin.WrapH(swaggerUI))
+
+	r.POST("/verify", ratelimit.RateLimit(limiter), func(c *gin.Context) {
 		var req verifyRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: input is required"})
@@ -75,6 +105,12 @@ func main() {
 		detected := classifier.Detect(req.Input)
 		res := verifier.Verify(detected, req.Input)
 
+		logging.AddRequestAttrs(c,
+			"inputType", string(detected),
+			"trustScore", res.TrustScore,
+			"verificationStatus", res.Status,
+		)
+
 		c.JSON(http.StatusOK, verifyResponse{
 			Input:      req.Input,
 			Type:       string(detected),
@@ -85,5 +121,9 @@ func main() {
 		})
 	})
 
-	r.Run(":8080")
+	addr := os.Getenv("PORT")
+	if addr == "" {
+		addr = "8080"
+	}
+	r.Run(":" + addr)
 }

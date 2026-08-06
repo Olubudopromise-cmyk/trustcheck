@@ -1,0 +1,225 @@
+openapi: 3.1.0
+info:
+  title: TrustCheck API
+  version: 1.0.0
+  description: >
+    TrustCheck API verifies the trustworthiness of a user-supplied input —
+    a domain, URL, email address, phone number, company name, or IP address.
+    Each input is classified, checked against public DNS, web, telephone, and
+    registry evidence, and scored from 0 to 100. The API powers the TrustCheck
+    web application and is available to any client that speaks HTTP JSON.
+  contact:
+    name: TrustCheck
+    url: https://github.com/pamierin/trustcheck
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Service health check
+      description: Returns the service name and liveness status of the API.
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /verify:
+    post:
+      operationId: verifyInput
+      summary: Verify a single input
+      description: >
+        Classifies the input and returns the detected type, a trust score from
+        0 to 100, a verification status, a human-readable summary, and the
+        ordered evidence used to compute the score.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+            examples:
+              domain:
+                summary: Domain
+                value:
+                  input: google.com
+              url:
+                summary: URL
+                value:
+                  input: https://google.com
+              ip:
+                summary: IP address
+                value:
+                  input: 8.8.8.8
+              phone:
+                summary: Phone number
+                value:
+                  input: '+2348012345678'
+              company:
+                summary: Company name
+                value:
+                  input: Google
+              unknown:
+                summary: Unrecognized input
+                value:
+                  input: '???'
+      responses:
+        '200':
+          description: Verification complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResponse'
+              examples:
+                domain:
+                  summary: Domain verification
+                  value:
+                    input: google.com
+                    type: domain
+                    status: verified
+                    trustScore: 60
+                    summary: Domain resolves and has a valid HTTPS certificate.
+                    evidence:
+                      - label: HTTPS Available
+                        result: pass
+                        points: 20
+        '400':
+          description: Invalid or missing input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missing-input:
+                  summary: Missing input field
+                  value:
+                    error: input is required
+                malformed-json:
+                  summary: Malformed request body
+                  value:
+                    error: 'invalid request: input is required'
+components:
+  schemas:
+    Health:
+      type: object
+      required:
+        - service
+        - status
+      properties:
+        service:
+          type: string
+          enum:
+            - trustcheck-api
+          description: Name of the service.
+        status:
+          type: string
+          enum:
+            - ok
+          description: Liveness status.
+      example:
+        service: trustcheck-api
+        status: ok
+    VerifyRequest:
+      type: object
+      required:
+        - input
+      properties:
+        input:
+          type: string
+          minLength: 1
+          description: The value to verify (domain, URL, email, phone number, company name, or IP address).
+      example:
+        input: google.com
+    VerifyResponse:
+      type: object
+      required:
+        - input
+        - type
+        - status
+        - trustScore
+        - summary
+        - evidence
+      properties:
+        input:
+          type: string
+          description: The original input, echoed back unchanged.
+        type:
+          $ref: '#/components/schemas/InputType'
+        status:
+          $ref: '#/components/schemas/VerificationStatus'
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Trust score from 0 (untrusted) to 100 (fully trusted).
+        summary:
+          type: string
+          description: Human-readable summary of the verification result.
+        evidence:
+          type: array
+          description: Ordered list of evidence items that contributed to the score.
+          items:
+            $ref: '#/components/schemas/Evidence'
+    Evidence:
+      type: object
+      required:
+        - label
+        - result
+        - points
+      properties:
+        label:
+          type: string
+          description: Short name of the check performed, e.g. "HTTPS Available".
+        result:
+          $ref: '#/components/schemas/EvidenceResult'
+        points:
+          type: integer
+          description: Points the check contributed to the final trust score.
+      example:
+        label: HTTPS Available
+        result: pass
+        points: 20
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Description of the error.
+    InputType:
+      type: string
+      description: Detected type of the input.
+      enum:
+        - domain
+        - url
+        - email
+        - phone
+        - company
+        - ipv4
+        - ipv6
+        - unknown
+    VerificationStatus:
+      type: string
+      description: Outcome of the verification.
+      enum:
+        - verified
+        - warning
+        - invalid
+        - private
+        - local
+        - unreachable
+        - suggestion
+        - unknown
+        - not_implemented
+    EvidenceResult:
+      type: string
+      description: Result of a single evidence check.
+      enum:
+        - pass
+        - warning
+        - fail
+        - info

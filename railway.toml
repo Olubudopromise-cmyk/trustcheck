@@ -1,0 +1,16 @@
+# Railway configuration for the frontend (Next.js) service.
+# Service Root Directory must be set to: / (repository root)
+# Builds the web app via the root Dockerfile (multi-stage Next.js build).
+#
+# Required service variables (set in Railway -> Variables):
+#   NEXT_PUBLIC_API_URL = https://<api-url>   # inlined into the client bundle at build time
+# Railway matches the Dockerfile's `ARG NEXT_PUBLIC_API_URL` and passes the
+# value in during the build; the built-in CMD (`pnpm start`) serves the app.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/"
+restartPolicyType = "ALWAYS"
