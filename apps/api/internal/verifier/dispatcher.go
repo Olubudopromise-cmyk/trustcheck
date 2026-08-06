@@ -33,12 +33,12 @@ func (domainVerifier) Verify(input string) Result {
 // Adding a new engine is a single registration in this map.
 var verifiers = map[classifier.InputType]Verifier{
 	classifier.TypeDomain:  domainVerifier{},
-	classifier.TypeEmail:   placeholderVerifier{},
+	classifier.TypeURL:     placeholderVerifier{},
+	classifier.TypeEmail:   emailVerifier{},
 	classifier.TypeIPv4:    placeholderVerifier{},
 	classifier.TypeIPv6:    placeholderVerifier{},
 	classifier.TypePhone:   placeholderVerifier{},
 	classifier.TypeCompany: placeholderVerifier{},
-	classifier.TypeURL:     placeholderVerifier{},
 	classifier.TypeUnknown: placeholderVerifier{},
 }
 
