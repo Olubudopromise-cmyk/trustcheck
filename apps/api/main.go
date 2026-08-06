@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pamierin/trustcheck/apps/api/internal/classifier"
 )
 
 type verifyRequest struct {
@@ -70,10 +71,10 @@ func main() {
 
 		resp := verifyResponse{
 			Input:      req.Input,
-			Type:       "website",
-			Status:     "verified",
-			TrustScore: 100,
-			Summary:    "Verification engine is not connected yet.",
+			Type:       string(classifier.Detect(req.Input)),
+			Status:     "classified",
+			TrustScore: 0,
+			Summary:    "Input classified successfully.",
 		}
 		c.JSON(http.StatusOK, resp)
 	})
