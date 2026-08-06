@@ -11,9 +11,9 @@ import (
 //
 // domain uses a ".invalid" host (RFC 2606, never resolves) so it
 // deterministically returns the domain engine's unreachable result -- proving
-// the domain route is taken and is NOT the placeholder. All other types
-// (except email, covered in TestVerify_EmailRoutesToEngine) hit the
-// placeholder engine and are asserted exactly.
+// the domain route is taken and is NOT the placeholder. phone is deterministic
+// (no network) so it is asserted exactly. The remaining types (email and url
+// have their own routing tests below) hit the placeholder engine.
 func TestVerify_RoutesToCorrectVerifier(t *testing.T) {
 	const placeholderSummary = "Verification engine not implemented yet."
 
@@ -29,8 +29,8 @@ func TestVerify_RoutesToCorrectVerifier(t *testing.T) {
 			Result{Status: "verified", TrustScore: 70, Summary: "Globally routable IP address."}},
 		{"ipv6 -> ipVerifier", classifier.TypeIPv6, "::1",
 			Result{Status: "local", TrustScore: 100, Summary: "Loopback address."}},
-		{"phone -> placeholder", classifier.TypePhone, "+15551234567",
-			Result{Status: "not_implemented", TrustScore: 0, Summary: placeholderSummary}},
+		{"phone -> phoneVerifier", classifier.TypePhone, "+15551234567",
+			Result{Status: "verified", TrustScore: 80, Summary: "Phone number format is valid (USA/Canada)."}},
 		{"company -> placeholder", classifier.TypeCompany, "OpenAI",
 			Result{Status: "not_implemented", TrustScore: 0, Summary: placeholderSummary}},
 		{"unknown -> placeholder", classifier.TypeUnknown, "???",
