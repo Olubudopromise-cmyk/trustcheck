@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pamierin/trustcheck/apps/api/internal/classifier"
+	"github.com/pamierin/trustcheck/apps/api/internal/verifier"
 )
 
 type verifyRequest struct {
@@ -69,14 +70,23 @@ func main() {
 			return
 		}
 
-		resp := verifyResponse{
-			Input:      req.Input,
-			Type:       string(classifier.Detect(req.Input)),
+		detected := classifier.Detect(req.Input)
+		res := verifier.Result{
 			Status:     "classified",
 			TrustScore: 0,
 			Summary:    "Input classified successfully.",
 		}
-		c.JSON(http.StatusOK, resp)
+		if detected == classifier.TypeDomain {
+			res = verifier.VerifyDomain(req.Input)
+		}
+
+		c.JSON(http.StatusOK, verifyResponse{
+			Input:      req.Input,
+			Type:       string(detected),
+			Status:     res.Status,
+			TrustScore: res.TrustScore,
+			Summary:    res.Summary,
+		})
 	})
 
 	r.Run(":8080")
