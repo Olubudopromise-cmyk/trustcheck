@@ -131,17 +131,30 @@ func SupportingEvidence(evidenceFor []model.EvidenceItem) []model.SourceGroup {
 	return groups
 }
 
+// engineFallbackLabels are generic engine messages ("I could not suggest
+// anything") rather than evidence about the claim, so they are never presented
+// as contradictions. Real failed checks and warnings still appear.
+var engineFallbackLabels = map[string]bool{
+	"No Suggestion": true,
+}
+
 // ContradictingEvidence turns each contradicting check into a structured
 // disagreement between the submitted claim and what the check observed. If no
 // contradicting evidence was found the list is empty; the caller never claims
 // a conflict exists when none was observed.
 func ContradictingEvidence(keyClaim string, evidenceAgainst []model.EvidenceItem) []model.Contradiction {
-	if len(evidenceAgainst) == 0 {
+	var observed []model.EvidenceItem
+	for _, item := range evidenceAgainst {
+		if !engineFallbackLabels[item.Label] {
+			observed = append(observed, item)
+		}
+	}
+	if len(observed) == 0 {
 		return nil
 	}
 
-	contradictions := make([]model.Contradiction, 0, len(evidenceAgainst))
-	for _, item := range evidenceAgainst {
+	contradictions := make([]model.Contradiction, 0, len(observed))
+	for _, item := range observed {
 		confidence := 55 // warning
 		if item.Result == "fail" {
 			confidence = 80
@@ -346,7 +359,13 @@ func freshnessMetric(result model.Result) (int, string) {
 // summary of the structured sections above — it never invents facts beyond
 // what those sections report.
 func AISummary(result model.Result) string {
-	support, against := len(result.EvidenceFor), len(result.EvidenceAgainst)
+	support := len(result.EvidenceFor)
+	against := 0
+	for _, item := range result.EvidenceAgainst {
+		if !engineFallbackLabels[item.Label] {
+			against++
+		}
+	}
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "This claim is assessed as %s with a trust score of %d out of 100 (%s). ",

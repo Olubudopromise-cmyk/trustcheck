@@ -70,6 +70,26 @@ func TestContradictingEvidence_EmptyWhenNoOpposingEvidence(t *testing.T) {
 	}
 }
 
+// TestContradictingEvidence_EngineFallbackIsNotAConflict ensures generic
+// engine messages like "No Suggestion" are never presented as contradictions.
+func TestContradictingEvidence_EngineFallbackIsNotAConflict(t *testing.T) {
+	got := ContradictingEvidence("claim", []model.EvidenceItem{
+		{Label: "No Suggestion", Result: "warning", Points: 10},
+	})
+	if got != nil {
+		t.Errorf("engine fallback should not be a contradiction, got %+v", got)
+	}
+}
+
+func TestAISummary_IgnoresEngineFallbackCount(t *testing.T) {
+	result := minimalResult()
+	result.EvidenceAgainst = []model.EvidenceItem{{Label: "No Suggestion", Result: "warning", Points: 10}}
+	summary := AISummary(result)
+	if strings.Contains(summary, "contradicting check") {
+		t.Errorf("engine fallback should not count as contradicting evidence, got %q", summary)
+	}
+}
+
 func TestMissingInformation_GroundsItems(t *testing.T) {
 	items := MissingInformation(
 		[]string{"Not verified: WHOIS registration data."},
