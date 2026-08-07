@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
+
 # Backend — Go + Gin verification API.
-# Multi-stage build: the builder compiles a static binary that is copied into
-# a minimal Alpine runtime image. No source code ships in the final image.
+# Multi-stage build: compile a static binary and copy it into a minimal runtime image.
 
 FROM golang:1.24-alpine AS builder
 WORKDIR /src
@@ -10,6 +10,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY main.go ./
+COPY openapi.yaml ./
 COPY internal ./internal
 
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /trustcheck-api .
