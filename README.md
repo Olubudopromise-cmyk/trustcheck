@@ -281,6 +281,7 @@ Every `/verify` response is built by a modular analysis pipeline. It answers, fo
 - **Why is the score what it is?** — the `reasoning` bullets and the High/Medium/Low `verdict` explain the score.
 - **What should the user verify next?** — `recommendations` list concrete next steps.
 - **How sure is the analysis?** — `confidence` (0–100) measures how much evidence the analysis collected, not the trust score itself.
+- **Multi-perspective fact analysis** — after the reasoning timeline, every result is investigated from several viewpoints: evidence grouped by source category (`supportingEvidence`), structured contradictions (`contradictingEvidence`), the "What is missing?" section (`missingInformation`), a user-friendly confidence breakdown (`confidenceBreakdown`), an AI-generated summary (`aiSummary`, ≤120 words), suggested reading (`suggestedReading`), and a dated story timeline (`whatChanged`). Sections only ever report observed findings; anything unverifiable is stated as such rather than invented.
 
 ### Pluggable modules
 
@@ -294,6 +295,10 @@ type Module interface {
 ```
 
 Modules run after the core stages and may amend the result in place. A failing module never breaks the analysis: it degrades to a low-severity warning signal. The backend is deployed from the same code with no extra infrastructure required.
+
+### Multi-perspective honesty
+
+The multi-perspective sections (`internal/perspectives`) follow strict honesty rules. The confidence breakdown exposes only user-facing metrics with plain-English notes — never the hidden scoring algorithm. Suggested reading carries search targets plus an explicit note that no specific articles could be identified (links are never fabricated), and the what-changed section states that no reliable dated history could be reconstructed instead of inventing a timeline. Every date, citation, source, and event in the response is an observed one.
 
 ## API Documentation
 
