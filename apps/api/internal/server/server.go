@@ -54,6 +54,17 @@ type verifyResponse struct {
 	Reasoning          []string               `json:"reasoning"`
 	Timeline           []model.ReasoningStep  `json:"timeline"`
 	Recommendations    []model.Recommendation `json:"recommendations"`
+
+	// Phase 12: multi-perspective fact analysis.
+	SupportingEvidence    []model.SourceGroup       `json:"supportingEvidence"`
+	ContradictingEvidence []model.Contradiction     `json:"contradictingEvidence"`
+	MissingInformation    []model.MissingInfo       `json:"missingInformation"`
+	ConfidenceBreakdown   model.ConfidenceBreakdown `json:"confidenceBreakdown"`
+	AISummary             string                    `json:"aiSummary"`
+	SuggestedReading      []model.SuggestedReading  `json:"suggestedReading"`
+	SuggestedReadingNote  string                    `json:"suggestedReadingNote,omitempty"`
+	WhatChanged           []model.ChangeEvent       `json:"whatChanged"`
+	WhatChangedNote       string                    `json:"whatChangedNote,omitempty"`
 }
 
 // NewRouter builds the fully configured TrustCheck API router.
@@ -122,26 +133,35 @@ func NewRouter(prefix string) *gin.Engine {
 		)
 
 		c.JSON(http.StatusOK, verifyResponse{
-			Input:              req.Input,
-			Type:               string(detected),
-			Status:             vr.Status,
-			TrustScore:         vr.TrustScore,
-			Summary:            vr.Summary,
-			Evidence:           vr.Evidence,
-			Verdict:            result.Verdict,
-			KeyClaim:           result.KeyClaim,
-			Entities:           result.Entities,
-			Keywords:           result.Keywords,
-			EvidenceFor:        result.EvidenceFor,
-			EvidenceAgainst:    result.EvidenceAgainst,
-			MissingEvidence:    result.MissingEvidence,
-			UnknownInformation: result.UnknownInformation,
-			Interpretations:    result.Interpretations,
-			WarningSignals:     result.WarningSignals,
-			Confidence:         result.Confidence,
-			Reasoning:          result.Reasoning,
-			Timeline:           result.Timeline,
-			Recommendations:    result.Recommendations,
+			Input:                 req.Input,
+			Type:                  string(detected),
+			Status:                vr.Status,
+			TrustScore:            vr.TrustScore,
+			Summary:               vr.Summary,
+			Evidence:              vr.Evidence,
+			Verdict:               result.Verdict,
+			KeyClaim:              result.KeyClaim,
+			Entities:              result.Entities,
+			Keywords:              result.Keywords,
+			EvidenceFor:           result.EvidenceFor,
+			EvidenceAgainst:       result.EvidenceAgainst,
+			MissingEvidence:       result.MissingEvidence,
+			UnknownInformation:    result.UnknownInformation,
+			Interpretations:       result.Interpretations,
+			WarningSignals:        result.WarningSignals,
+			Confidence:            result.Confidence,
+			Reasoning:             result.Reasoning,
+			Timeline:              result.Timeline,
+			Recommendations:       result.Recommendations,
+			SupportingEvidence:    result.SupportingEvidence,
+			ContradictingEvidence: result.ContradictingEvidence,
+			MissingInformation:    result.MissingInformation,
+			ConfidenceBreakdown:   result.ConfidenceBreakdown,
+			AISummary:             result.AISummary,
+			SuggestedReading:      result.SuggestedReading,
+			SuggestedReadingNote:  result.SuggestedReadingNote,
+			WhatChanged:           result.WhatChanged,
+			WhatChangedNote:       result.WhatChangedNote,
 		})
 	})
 

@@ -12,6 +12,7 @@ import (
 	"github.com/pamierin/trustcheck/apps/api/internal/classifier"
 	"github.com/pamierin/trustcheck/apps/api/internal/interpretations"
 	"github.com/pamierin/trustcheck/apps/api/internal/model"
+	"github.com/pamierin/trustcheck/apps/api/internal/perspectives"
 	"github.com/pamierin/trustcheck/apps/api/internal/reasoning"
 	"github.com/pamierin/trustcheck/apps/api/internal/recommendations"
 	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
@@ -89,6 +90,16 @@ func (a *Analyzer) Analyze(ctx context.Context, input string, inputType classifi
 		Reasoning:          reasoning.Explain(vr.TrustScore, inputType, evidenceFor, evidenceAgainst),
 		Recommendations:    recommendations.Generate(inputType, verdict),
 	}
+
+	// Phase 12: multi-perspective fact analysis.
+	result.SupportingEvidence = perspectives.SupportingEvidence(result.EvidenceFor)
+	result.ContradictingEvidence = perspectives.ContradictingEvidence(result.KeyClaim, result.EvidenceAgainst)
+	result.MissingInformation = perspectives.MissingInformation(result.MissingEvidence, result.UnknownInformation, result.WarningSignals)
+	result.ConfidenceBreakdown = perspectives.ConfidenceBreakdown(result)
+	result.AISummary = perspectives.AISummary(result)
+	result.SuggestedReading, result.SuggestedReadingNote = perspectives.SuggestedReading(inputType, result.Entities)
+	result.WhatChanged, result.WhatChangedNote = perspectives.WhatChanged(result)
+
 	result.Timeline = buildTimeline(result, neutral)
 
 	for _, m := range a.modules {

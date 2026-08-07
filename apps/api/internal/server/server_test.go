@@ -48,6 +48,17 @@ func TestVerifyResponse_IncludesLegacyAndAnalysisFields(t *testing.T) {
 		}
 	}
 
+	// Phase 12 multi-perspective contract.
+	for _, field := range []string{
+		"supportingEvidence", "contradictingEvidence", "missingInformation",
+		"confidenceBreakdown", "aiSummary", "suggestedReading", "suggestedReadingNote",
+		"whatChanged", "whatChangedNote",
+	} {
+		if _, ok := resp[field]; !ok {
+			t.Errorf("multi-perspective field %q missing from response", field)
+		}
+	}
+
 	// A structured input should have a non-empty keyClaim and reasoning.
 	if resp["keyClaim"] == "" {
 		t.Error("keyClaim should not be empty for a structured input")
@@ -63,6 +74,20 @@ func TestVerifyResponse_IncludesLegacyAndAnalysisFields(t *testing.T) {
 	}
 	if arr, ok := resp["timeline"].([]interface{}); !ok || len(arr) != 6 {
 		t.Errorf("timeline should contain 6 reasoning steps, got %d", len(arr))
+	}
+
+	if breakdown, ok := resp["confidenceBreakdown"].(map[string]interface{}); ok {
+		if metrics, ok := breakdown["metrics"].([]interface{}); !ok || len(metrics) < 6 {
+			t.Errorf("confidence breakdown should contain at least 6 metrics, got %d", len(metrics))
+		}
+	} else {
+		t.Error("confidenceBreakdown should be an object")
+	}
+	if resp["aiSummary"] == "" {
+		t.Error("aiSummary should not be empty")
+	}
+	if resp["suggestedReadingNote"] == "" || resp["whatChangedNote"] == "" {
+		t.Error("suggested reading and what-changed sections should carry honest notes")
 	}
 }
 

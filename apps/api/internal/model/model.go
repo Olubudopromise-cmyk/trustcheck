@@ -49,11 +49,14 @@ const (
 // Interpretation is one plausible reading of an input. An analysis always
 // returns 2-3 interpretations so a single meaning is never assumed. Confidence
 // is 0-100 and reasoning explains why that reading is plausible.
+// SupportingEvidenceCount is the number of scored checks consistent with this
+// reading, so the user can see how much evidence backs each interpretation.
 type Interpretation struct {
-	Title       string `json:"title"`
-	Explanation string `json:"explanation"`
-	Confidence  int    `json:"confidence"`
-	Reasoning   string `json:"reasoning"`
+	Title                   string `json:"title"`
+	Explanation             string `json:"explanation"`
+	Confidence              int    `json:"confidence"`
+	Reasoning               string `json:"reasoning"`
+	SupportingEvidenceCount int    `json:"supportingEvidenceCount"`
 }
 
 // WarningSignal is a structured misinformation indicator. Severity is one of
@@ -88,6 +91,75 @@ type EvidenceItem struct {
 	Result string `json:"result"`
 	Points int    `json:"points"`
 	Note   string `json:"note,omitempty"`
+}
+
+// SourceEvidence is one piece of evidence attributed to a named source. All
+// fields are grounded in observable findings; PublicationDate is empty when the
+// date is unknown and is never fabricated.
+type SourceEvidence struct {
+	Title           string `json:"title"`
+	Source          string `json:"source"`
+	Credibility     string `json:"credibility"`
+	PublicationDate string `json:"publicationDate,omitempty"`
+	Summary         string `json:"summary"`
+}
+
+// SourceGroup groups SourceEvidence items by the kind of source they came from
+// (official, independent journalism, community, academic, ...).
+type SourceGroup struct {
+	Category string           `json:"category"`
+	Items    []SourceEvidence `json:"items"`
+}
+
+// Contradiction describes a disagreement between sources or between the claim
+// and a source. ConfidenceInContradiction is 0-100 and reflects how strongly
+// the evidence supports that the sources genuinely disagree.
+type Contradiction struct {
+	SourceA                   string `json:"sourceA"`
+	ClaimA                    string `json:"claimA"`
+	SourceB                   string `json:"sourceB"`
+	ClaimB                    string `json:"claimB"`
+	WhyTheyDisagree           string `json:"whyTheyDisagree"`
+	ConfidenceInContradiction int    `json:"confidenceInContradiction"`
+}
+
+// MissingInfo is one fact that is absent from the submission. WhyItMatters
+// explains the consequence in plain English.
+type MissingInfo struct {
+	Item         string `json:"item"`
+	WhyItMatters string `json:"whyItMatters"`
+}
+
+// ConfidenceMetric is one user-friendly, 0-100 component of the confidence
+// breakdown. Notes explain what each metric reflects so no hidden scoring
+// algorithm is exposed.
+type ConfidenceMetric struct {
+	Name  string `json:"name"`
+	Score int    `json:"score"`
+	Note  string `json:"note"`
+}
+
+// ConfidenceBreakdown is the user-facing decomposition of the overall
+// confidence. Overall is 0-100; Metrics are the components that explain it.
+type ConfidenceBreakdown struct {
+	Overall int                `json:"overall"`
+	Metrics []ConfidenceMetric `json:"metrics"`
+}
+
+// SuggestedReading recommends material the user should consult. URLs are never
+// fabricated; when a specific resource is unknown the section carries an
+// honest statement instead.
+type SuggestedReading struct {
+	Title      string `json:"title"`
+	Publisher  string `json:"publisher"`
+	WhyItHelps string `json:"whyItHelps"`
+}
+
+// ChangeEvent is one dated step in how the story evolved over time. Dates are
+// only ever the ones that were actually observed; nothing is invented.
+type ChangeEvent struct {
+	Date  string `json:"date"`
+	Event string `json:"event"`
 }
 
 // Result is the complete explainable analysis for one verified input.
@@ -147,4 +219,40 @@ type Result struct {
 
 	// Recommendations are the next steps the user should take.
 	Recommendations []Recommendation `json:"recommendations"`
+
+	// --- Phase 12: multi-perspective fact analysis ---
+
+	// SupportingEvidence groups supporting evidence by source category.
+	SupportingEvidence []SourceGroup `json:"supportingEvidence"`
+
+	// ContradictingEvidence lists disagreements found between sources.
+	ContradictingEvidence []Contradiction `json:"contradictingEvidence"`
+
+	// MissingInformation is the "What is missing?" section.
+	MissingInformation []MissingInfo `json:"missingInformation"`
+
+	// ConfidenceBreakdown decomposes the overall confidence into user-facing
+	// metrics.
+	ConfidenceBreakdown ConfidenceBreakdown `json:"confidenceBreakdown"`
+
+	// AISummary is a short, user-facing paragraph (≤120 words) summarizing the
+	// assessment. It is AI-generated and labeled as such; it never invents
+	// facts beyond what the structured sections report.
+	AISummary string `json:"aiSummary"`
+
+	// SuggestedReading recommends material to consult. URLs are never
+	// fabricated; when none can be identified the section says so.
+	SuggestedReading []SuggestedReading `json:"suggestedReading"`
+
+	// SuggestedReadingNote is an honest statement shown when no specific
+	// reading could be identified (never a fabricated list).
+	SuggestedReadingNote string `json:"suggestedReadingNote,omitempty"`
+
+	// WhatChanged is the dated evolution of the story. Dates are only ever
+	// observed ones; nothing is invented.
+	WhatChanged []ChangeEvent `json:"whatChanged"`
+
+	// WhatChangedNote is an honest statement shown when no timeline could be
+	// reconstructed (never a fabricated timeline).
+	WhatChangedNote string `json:"whatChangedNote,omitempty"`
 }

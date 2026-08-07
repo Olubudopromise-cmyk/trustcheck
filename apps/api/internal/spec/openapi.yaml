@@ -37,7 +37,10 @@ paths:
         extracted main claim with its entities and keywords, evidence split into
         supporting and contradicting sections, alternative interpretations,
         misinformation warning signals, an explanation of the score, and
-        recommended next steps.
+        recommended next steps. It also returns the multi-perspective fact
+        analysis: evidence grouped by source, contradictions, missing
+        information, a user-facing confidence breakdown, an AI summary,
+        suggested reading, and a "what changed" story timeline.
       requestBody:
         required: true
         content:
@@ -234,6 +237,42 @@ components:
           description: Actionable next steps for the user.
           items:
             $ref: '#/components/schemas/Recommendation'
+        supportingEvidence:
+          type: array
+          description: Supporting evidence grouped by the category of source it came from.
+          items:
+            $ref: '#/components/schemas/SourceGroup'
+        contradictingEvidence:
+          type: array
+          description: Disagreements found between the submitted claim and the observed evidence, or between sources.
+          items:
+            $ref: '#/components/schemas/Contradiction'
+        missingInformation:
+          type: array
+          description: The "What is missing?" section. Never fabricated.
+          items:
+            $ref: '#/components/schemas/MissingInfo'
+        confidenceBreakdown:
+          $ref: '#/components/schemas/ConfidenceBreakdown'
+        aiSummary:
+          type: string
+          description: AI-generated summary of the assessment (max 120 words), labeled as a summary of the structured sections.
+        suggestedReading:
+          type: array
+          description: Recommended reading. Links are never fabricated; when no specific article is known the section says so.
+          items:
+            $ref: '#/components/schemas/SuggestedReading'
+        suggestedReadingNote:
+          type: string
+          description: Honest statement shown when no specific reading could be identified.
+        whatChanged:
+          type: array
+          description: Dated evolution of the story. Dates are only ever observed ones.
+          items:
+            $ref: '#/components/schemas/ChangeEvent'
+        whatChangedNote:
+          type: string
+          description: Honest statement shown when no dated timeline could be reconstructed.
     ReasoningStep:
       type: object
       required:
@@ -303,6 +342,7 @@ components:
         - explanation
         - confidence
         - reasoning
+        - supportingEvidenceCount
       properties:
         title:
           type: string
@@ -318,6 +358,10 @@ components:
         reasoning:
           type: string
           description: Why this interpretation is plausible.
+        supportingEvidenceCount:
+          type: integer
+          minimum: 0
+          description: Number of scored checks consistent with this interpretation.
     WarningSignal:
       type: object
       required:
@@ -350,6 +394,150 @@ components:
         description:
           type: string
           description: Why and how to perform the action.
+    SourceGroup:
+      type: object
+      required:
+        - category
+        - items
+      properties:
+        category:
+          type: string
+          description: Category of the source, e.g. "Network infrastructure" or "Transport security".
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceEvidence'
+    SourceEvidence:
+      type: object
+      required:
+        - title
+        - source
+        - credibility
+        - summary
+      properties:
+        title:
+          type: string
+          description: Name of the check or finding.
+        source:
+          type: string
+          description: Where the evidence came from.
+        credibility:
+          type: string
+          enum:
+            - high
+            - medium
+            - low
+            - unknown
+          description: User-facing credibility of the source.
+        publicationDate:
+          type: string
+          description: Publication date when observed. Empty when unknown; never fabricated.
+        summary:
+          type: string
+          description: Plain-English account of what the evidence shows.
+    Contradiction:
+      type: object
+      required:
+        - sourceA
+        - claimA
+        - sourceB
+        - claimB
+        - whyTheyDisagree
+        - confidenceInContradiction
+      properties:
+        sourceA:
+          type: string
+          description: First side of the disagreement.
+        claimA:
+          type: string
+          description: What the first side claims.
+        sourceB:
+          type: string
+          description: Second side of the disagreement.
+        claimB:
+          type: string
+          description: What the second side claims.
+        whyTheyDisagree:
+          type: string
+          description: Plain-English explanation of the disagreement.
+        confidenceInContradiction:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: How strongly the evidence supports that the sides genuinely disagree.
+    MissingInfo:
+      type: object
+      required:
+        - item
+        - whyItMatters
+      properties:
+        item:
+          type: string
+          description: What is missing, e.g. "Publication date".
+        whyItMatters:
+          type: string
+          description: Consequence of the missing information.
+    ConfidenceBreakdown:
+      type: object
+      required:
+        - overall
+        - metrics
+      properties:
+        overall:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Overall confidence, mirroring the analysis confidence.
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfidenceMetric'
+    ConfidenceMetric:
+      type: object
+      required:
+        - name
+        - score
+        - note
+      properties:
+        name:
+          type: string
+          description: User-friendly metric name, e.g. "Source credibility".
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: User-facing metric value.
+        note:
+          type: string
+          description: Plain-English explanation of what the metric reflects.
+    SuggestedReading:
+      type: object
+      required:
+        - title
+        - publisher
+        - whyItHelps
+      properties:
+        title:
+          type: string
+          description: Title of the recommended material or search target.
+        publisher:
+          type: string
+          description: Publisher or kind of publisher to consult.
+        whyItHelps:
+          type: string
+          description: How this material helps the user.
+    ChangeEvent:
+      type: object
+      required:
+        - date
+        - event
+      properties:
+        date:
+          type: string
+          description: Observed date of the event.
+        event:
+          type: string
+          description: What happened on that date.
     Evidence:
       type: object
       required:

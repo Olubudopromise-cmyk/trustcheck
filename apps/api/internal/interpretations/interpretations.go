@@ -64,22 +64,25 @@ func forText(c Context) []model.Interpretation {
 	claim := firstSentence(c.Claim.MainClaim, c.Input)
 
 	literal := model.Interpretation{
-		Title:       "Literal reading",
-		Explanation: "The text means exactly what it says: " + claim,
-		Confidence:  70,
-		Reasoning:   "Read at face value, the sentence is grammatically direct and makes a specific assertion.",
+		Title:                   "Literal reading",
+		Explanation:             "The text means exactly what it says: " + claim,
+		Confidence:              70,
+		Reasoning:               "Read at face value, the sentence is grammatically direct and makes a specific assertion.",
+		SupportingEvidenceCount: len(c.EvidenceFor),
 	}
 	satire := model.Interpretation{
-		Title:       "Satire or exaggeration",
-		Explanation: "The claim may be satire, parody, or hyperbole rather than a factual report.",
-		Confidence:  40,
-		Reasoning:   "Sensational or surprising claims often originate from satirical outlets or are exaggerated for engagement.",
+		Title:                   "Satire or exaggeration",
+		Explanation:             "The claim may be satire, parody, or hyperbole rather than a factual report.",
+		Confidence:              40,
+		Reasoning:               "Sensational or surprising claims often originate from satirical outlets or are exaggerated for engagement.",
+		SupportingEvidenceCount: len(c.EvidenceAgainst),
 	}
 	alternative := model.Interpretation{
-		Title:       "Alternative context",
-		Explanation: "The headline may be about something else entirely — an unrelated event, an analogy, or an incomplete context.",
-		Confidence:  35,
-		Reasoning:   "Headlines routinely condense or reframe events; without the full source the intended referent is unclear.",
+		Title:                   "Alternative context",
+		Explanation:             "The headline may be about something else entirely — an unrelated event, an analogy, or an incomplete context.",
+		Confidence:              35,
+		Reasoning:               "Headlines routinely condense or reframe events; without the full source the intended referent is unclear.",
+		SupportingEvidenceCount: 0,
 	}
 
 	if highSeverityWarnings(c) {
@@ -98,22 +101,25 @@ func forText(c Context) []model.Interpretation {
 // for structured inputs (domains, emails, phones, companies, URLs, IPs).
 func forIdentifier(c Context) []model.Interpretation {
 	legit := model.Interpretation{
-		Title:       "Genuine identifier",
-		Explanation: "The " + string(c.InputType) + " belongs to the organization or person it claims to represent.",
-		Confidence:  80,
-		Reasoning:   "The identifier passes the expected format and infrastructure checks.",
+		Title:                   "Genuine identifier",
+		Explanation:             "The " + string(c.InputType) + " belongs to the organization or person it claims to represent.",
+		Confidence:              80,
+		Reasoning:               "The identifier passes the expected format and infrastructure checks.",
+		SupportingEvidenceCount: len(c.EvidenceFor),
 	}
 	lookalike := model.Interpretation{
-		Title:       "Lookalike or impersonation",
-		Explanation: "The " + string(c.InputType) + " may imitate a well-known name to deceive (typosquatting, spoofing, or a similar-sounding entity).",
-		Confidence:  45,
-		Reasoning:   "Identifiers that resemble famous names without belonging to them are a common phishing vector.",
+		Title:                   "Lookalike or impersonation",
+		Explanation:             "The " + string(c.InputType) + " may imitate a well-known name to deceive (typosquatting, spoofing, or a similar-sounding entity).",
+		Confidence:              45,
+		Reasoning:               "Identifiers that resemble famous names without belonging to them are a common phishing vector.",
+		SupportingEvidenceCount: len(c.EvidenceAgainst),
 	}
 	unknown := model.Interpretation{
-		Title:       "Origin unknown",
-		Explanation: "Not enough is known about the " + string(c.InputType) + " to judge who controls it.",
-		Confidence:  50,
-		Reasoning:   "Ownership and provenance of the identifier were not confirmed by the available checks.",
+		Title:                   "Origin unknown",
+		Explanation:             "Not enough is known about the " + string(c.InputType) + " to judge who controls it.",
+		Confidence:              50,
+		Reasoning:               "Ownership and provenance of the identifier were not confirmed by the available checks.",
+		SupportingEvidenceCount: 0,
 	}
 
 	if undermined(c) {
