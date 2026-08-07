@@ -56,6 +56,7 @@ func (a *Analyzer) Analyze(ctx context.Context, input string, inputType classifi
 	claim := claims.Extract(input, inputType)
 	signals := warnings.Detect(input, inputType)
 	evidenceFor, evidenceAgainst := splitEvidence(vr.Evidence)
+	neutral := neutralCount(vr.Evidence)
 	verdict := VerdictFromScore(vr.TrustScore)
 
 	interpretations := interpretations.Generate(interpretations.Context{
@@ -88,6 +89,7 @@ func (a *Analyzer) Analyze(ctx context.Context, input string, inputType classifi
 		Reasoning:          reasoning.Explain(vr.TrustScore, inputType, evidenceFor, evidenceAgainst),
 		Recommendations:    recommendations.Generate(inputType, verdict),
 	}
+	result.Timeline = buildTimeline(result, neutral)
 
 	for _, m := range a.modules {
 		if err := m.Enrich(ctx, input, &result); err != nil {
@@ -127,6 +129,18 @@ func splitEvidence(evidence []scoring.Evidence) (forItems, againstItems []model.
 		}
 	}
 	return forItems, againstItems
+}
+
+// neutralCount counts informational evidence items (no score weight) so the
+// timeline can report neutral references accurately.
+func neutralCount(evidence []scoring.Evidence) int {
+	count := 0
+	for _, e := range evidence {
+		if e.Result == "info" {
+			count++
+		}
+	}
+	return count
 }
 
 // standardChecks lists, per input type, the checks that would normally
