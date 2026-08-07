@@ -38,6 +38,11 @@ func TestDetect(t *testing.T) {
 		{"", TypeUnknown},
 		{"   ", TypeUnknown},
 		{"1.2.3", TypeUnknown},
+		// Free-form sentences are unknown (not company names), so the
+		// explainable text analysis can run on them.
+		{"NASA confirms aliens landed in Lagos yesterday.", TypeUnknown},
+		{"Aliens landed in Lagos yesterday", TypeUnknown},
+		{"The company announced a major security breach today", TypeUnknown},
 	}
 	for _, c := range cases {
 		got := Detect(c.in)

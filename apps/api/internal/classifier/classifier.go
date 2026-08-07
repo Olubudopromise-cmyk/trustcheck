@@ -28,6 +28,12 @@ const (
 	TypeUnknown InputType = "unknown"
 )
 
+// maxCompanyWords caps how many words a company name may contain. Longer
+// letter-leading strings are free-form sentences and are classified as unknown
+// so the explainable analysis (claim extraction, interpretations, ...) can
+// process them. Genuine company names are short proper nouns.
+const maxCompanyWords = 4
+
 var (
 	// domainRegex matches dotted DNS names whose final label is a >=2 char TLD
 	// (e.g. google.com, bbc.co.uk). It deliberately excludes pure IPs and
@@ -105,8 +111,10 @@ func Detect(input string) InputType {
 		return TypeDomain
 	}
 
-	// 6. Company: a short, letter-leading proper name.
-	if companyRegex.MatchString(in) {
+	// 6. Company: a short, letter-leading proper name. Names longer than
+	// maxCompanyWords are treated as free-form text (sentences) so the
+	// explainable analysis can run on them.
+	if companyRegex.MatchString(in) && len(strings.Fields(in)) <= maxCompanyWords {
 		return TypeCompany
 	}
 
