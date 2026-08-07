@@ -27,6 +27,7 @@ export interface Interpretation {
   explanation: string;
   confidence: number;
   reasoning: string;
+  supportingEvidenceCount: number;
 }
 
 export type WarningSeverity = 'high' | 'medium' | 'low';
@@ -46,6 +47,55 @@ export interface ReasoningStep {
   title: string;
   summary: string;
   details: string[];
+}
+
+export interface SourceEvidence {
+  title: string;
+  source: string;
+  credibility: string;
+  publicationDate?: string;
+  summary: string;
+}
+
+export interface SourceGroup {
+  category: string;
+  items: SourceEvidence[];
+}
+
+export interface Contradiction {
+  sourceA: string;
+  claimA: string;
+  sourceB: string;
+  claimB: string;
+  whyTheyDisagree: string;
+  confidenceInContradiction: number;
+}
+
+export interface MissingInfo {
+  item: string;
+  whyItMatters: string;
+}
+
+export interface ConfidenceMetric {
+  name: string;
+  score: number;
+  note: string;
+}
+
+export interface ConfidenceBreakdown {
+  overall: number;
+  metrics: ConfidenceMetric[];
+}
+
+export interface SuggestedReading {
+  title: string;
+  publisher: string;
+  whyItHelps: string;
+}
+
+export interface ChangeEvent {
+  date: string;
+  event: string;
 }
 
 export type VerifyResponse = {
@@ -71,6 +121,17 @@ export type VerifyResponse = {
   reasoning?: string[];
   timeline?: ReasoningStep[];
   recommendations?: Recommendation[];
+  // Phase 12: multi-perspective fact analysis. Optional so results saved in
+  // local history before this extension shipped still render.
+  supportingEvidence?: SourceGroup[];
+  contradictingEvidence?: Contradiction[];
+  missingInformation?: MissingInfo[];
+  confidenceBreakdown?: ConfidenceBreakdown;
+  aiSummary?: string;
+  suggestedReading?: SuggestedReading[];
+  suggestedReadingNote?: string;
+  whatChanged?: ChangeEvent[];
+  whatChangedNote?: string;
 };
 
 export interface VerificationHistoryItem {

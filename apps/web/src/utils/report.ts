@@ -129,6 +129,22 @@ export function renderReportHTML(result: VerifyResponse): string {
     sections.push(`<h2>Reasoning Timeline</h2><ol>\n${timelineItems}\n</ol>`);
   }
 
+  if (result.aiSummary) {
+    sections.push(`<h2>AI Summary</h2><p>${escapeHtml(result.aiSummary)}</p>`);
+  }
+
+  if (result.confidenceBreakdown) {
+    const metricItems = result.confidenceBreakdown.metrics
+      .map(
+        (m) =>
+          `<li><strong>${escapeHtml(m.name)}</strong> ${m.score}% — ${escapeHtml(m.note)}</li>`,
+      )
+      .join('\n');
+    sections.push(
+      `<h2>Confidence Breakdown</h2><p>Overall confidence: ${result.confidenceBreakdown.overall}%</p><ul>\n${metricItems}\n</ul>`,
+    );
+  }
+
   if (result.keyClaim) {
     sections.push(`<h2>Main Claim</h2><p>${escapeHtml(result.keyClaim)}</p>`);
   }
@@ -187,12 +203,70 @@ export function renderReportHTML(result: VerifyResponse): string {
     const interpItems = result.interpretations
       .map(
         (i) =>
-          `<li><strong>${escapeHtml(i.title)}</strong> (${i.confidence}%)<br />${escapeHtml(
+          `<li><strong>${escapeHtml(i.title)}</strong> (${i.confidence}%, ${i.supportingEvidenceCount} supporting check(s))<br />${escapeHtml(
             i.explanation,
           )}<br /><em style="color:#64748b">${escapeHtml(i.reasoning)}</em></li>`,
       )
       .join('\n');
-    sections.push(`<h2>Possible Interpretations</h2><ul>\n${interpItems}\n</ul>`);
+    sections.push(`<h2>Multiple Interpretations</h2><ul>\n${interpItems}\n</ul>`);
+  }
+
+  if (result.supportingEvidence?.length) {
+    const groupItems = result.supportingEvidence
+      .map((group) => {
+        const items = group.items
+          .map(
+            (item) =>
+              `<li><strong>${escapeHtml(item.title)}</strong> <em style="color:#64748b">(${escapeHtml(item.credibility)} · ${escapeHtml(item.source)})</em><br />${escapeHtml(item.summary)}${item.publicationDate ? `<br /><em style="color:#64748b">Published: ${escapeHtml(item.publicationDate)}</em>` : ''}</li>`,
+          )
+          .join('\n');
+        return `<li><strong>${escapeHtml(group.category)}</strong><ul>\n${items}\n</ul></li>`;
+      })
+      .join('\n');
+    sections.push(`<h2>Supporting Evidence</h2><ul>\n${groupItems}\n</ul>`);
+  }
+
+  if (result.contradictingEvidence?.length) {
+    const contradictionItems = result.contradictingEvidence
+      .map(
+        (c) =>
+          `<li><strong>${escapeHtml(c.sourceA)}</strong>: ${escapeHtml(c.claimA)}<br /><strong>${escapeHtml(c.sourceB)}</strong>: ${escapeHtml(c.claimB)}<br />${escapeHtml(c.whyTheyDisagree)} <em style="color:#64748b">(confidence ${c.confidenceInContradiction}%)</em></li>`,
+      )
+      .join('\n');
+    sections.push(`<h2>Contradicting Evidence</h2><ul>\n${contradictionItems}\n</ul>`);
+  }
+
+  if (result.missingInformation?.length) {
+    const missingItems = result.missingInformation
+      .map(
+        (m) => `<li><strong>${escapeHtml(m.item)}</strong><br />${escapeHtml(m.whyItMatters)}</li>`,
+      )
+      .join('\n');
+    sections.push(`<h2>Missing Information</h2><ul>\n${missingItems}\n</ul>`);
+  }
+
+  if (result.whatChanged?.length) {
+    const changeItems = result.whatChanged
+      .map((e) => `<li><strong>${escapeHtml(e.date)}</strong> — ${escapeHtml(e.event)}</li>`)
+      .join('\n');
+    sections.push(`<h2>What Changed?</h2><ul>\n${changeItems}\n</ul>`);
+  } else if (result.whatChangedNote) {
+    sections.push(`<h2>What Changed?</h2><p>${escapeHtml(result.whatChangedNote)}</p>`);
+  }
+
+  if (result.suggestedReading?.length) {
+    const readingItems = result.suggestedReading
+      .map(
+        (r) =>
+          `<li><strong>${escapeHtml(r.title)}</strong> <em style="color:#64748b">(${escapeHtml(r.publisher)})</em><br />${escapeHtml(r.whyItHelps)}</li>`,
+      )
+      .join('\n');
+    sections.push(`<h2>Suggested Reading</h2><ul>\n${readingItems}\n</ul>`);
+    if (result.suggestedReadingNote) {
+      sections.push(`<p style="color:#64748b">${escapeHtml(result.suggestedReadingNote)}</p>`);
+    }
+  } else if (result.suggestedReadingNote) {
+    sections.push(`<h2>Suggested Reading</h2><p>${escapeHtml(result.suggestedReadingNote)}</p>`);
   }
 
   if (result.warningSignals?.length) {

@@ -43,6 +43,9 @@ function InterpretationsList({ interpretations }: { interpretations?: Interpreta
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             {interpretation.reasoning}
           </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {interpretation.supportingEvidenceCount} scored check(s) support this reading
+          </p>
         </article>
       ))}
     </section>

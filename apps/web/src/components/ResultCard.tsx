@@ -2,19 +2,26 @@
 
 import { memo } from 'react';
 import type { VerifyResponse } from '../types';
+import AISummary from './AISummary';
 import CollapsibleSection from './CollapsibleSection';
+import ConfidenceBreakdown from './ConfidenceBreakdown';
+import ContradictingEvidence from './ContradictingEvidence';
 import EvidenceList from './EvidenceList';
 import EvidenceSections from './EvidenceSections';
 import ExportMenu from './ExportMenu';
 import InterpretationsList from './InterpretationsList';
 import MainClaimSection from './MainClaimSection';
+import MissingInformation from './MissingInformation';
 import ReasoningList from './ReasoningList';
 import RecommendationsList from './RecommendationsList';
 import ReasoningTimeline from './ReasoningTimeline';
 import StatusBadge from './StatusBadge';
+import SuggestedReading from './SuggestedReading';
+import SupportingEvidence from './SupportingEvidence';
 import TrustScore from './TrustScore';
 import TypeIcon, { typeLabel } from './TypeIcon';
 import WarningSignals from './WarningSignals';
+import WhatChanged from './WhatChanged';
 
 // verdictMeta styles the High/Medium/Low verdict badge.
 const verdictMeta: Record<string, { label: string; color: string }> = {
@@ -110,7 +117,7 @@ function ResultCard({ result }: { result: VerifyResponse }) {
           {/* Overall assessment */}
           <section
             aria-label="Overall assessment"
-            className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"
+            className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800"
           >
             <div className="flex flex-wrap items-center gap-4">
               <TrustScore score={result.trustScore} />
@@ -142,11 +149,68 @@ function ResultCard({ result }: { result: VerifyResponse }) {
             />
           </div>
 
+          {/* Multi-perspective fact analysis, in the spec order. */}
           <div className="mt-3 space-y-3">
+            <CollapsibleSection title="AI Summary" defaultOpen>
+              <AISummary summary={result.aiSummary} />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Confidence Breakdown" defaultOpen>
+              <ConfidenceBreakdown breakdown={result.confidenceBreakdown} />
+            </CollapsibleSection>
+
             <CollapsibleSection
-              title="Evidence"
-              badge={evidenceCount ? String(evidenceCount) : undefined}
+              title="Multiple Interpretations"
+              badge={String(result.interpretations?.length ?? 0)}
               defaultOpen
+            >
+              <InterpretationsList interpretations={result.interpretations} />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Supporting Evidence"
+              badge={
+                result.supportingEvidence?.length
+                  ? String(result.supportingEvidence.length)
+                  : undefined
+              }
+              defaultOpen
+            >
+              <SupportingEvidence groups={result.supportingEvidence} />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Contradicting Evidence"
+              badge={
+                result.contradictingEvidence?.length
+                  ? String(result.contradictingEvidence.length)
+                  : undefined
+              }
+            >
+              <ContradictingEvidence contradictions={result.contradictingEvidence} />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Missing Information">
+              <MissingInformation items={result.missingInformation} />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="What Changed?">
+              <WhatChanged events={result.whatChanged} note={result.whatChangedNote} />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Suggested Reading">
+              <SuggestedReading
+                items={result.suggestedReading}
+                note={result.suggestedReadingNote}
+              />
+            </CollapsibleSection>
+          </div>
+
+          {/* Legacy evidence detail, kept for full transparency. */}
+          <div className="mt-3">
+            <CollapsibleSection
+              title="Evidence Detail"
+              badge={evidenceCount ? String(evidenceCount) : undefined}
             >
               <EvidenceSections
                 evidenceFor={result.evidenceFor}
@@ -155,15 +219,9 @@ function ResultCard({ result }: { result: VerifyResponse }) {
                 unknownInformation={result.unknownInformation}
               />
             </CollapsibleSection>
+          </div>
 
-            <CollapsibleSection
-              title="Possible Interpretations"
-              badge={String(result.interpretations?.length ?? 0)}
-              defaultOpen
-            >
-              <InterpretationsList interpretations={result.interpretations} />
-            </CollapsibleSection>
-
+          <div className="mt-3 space-y-3">
             <CollapsibleSection title="Warning Signals">
               <WarningSignals signals={result.warningSignals} />
             </CollapsibleSection>
