@@ -17,7 +17,8 @@ TrustCheck verifies a target, scores its trustworthiness, and explains the verdi
 ## Features
 
 - **Multi-type verification** — domains, URLs, emails, IPv4/IPv6, phone numbers, and company names.
-- **Transparent scoring** — every result carries a `trustScore` (0–100), a status, and ordered `evidence` explaining how the score was reached.
+- **Explainable analysis** — every result goes beyond a score: it states the **main claim** under review, extracts **entities** and **keywords**, splits evidence into **supporting** and **contradicting** sections, offers **2–3 alternative interpretations**, flags **misinformation warning signals**, explains **why the score is what it is**, and recommends **next steps**.
+- **Transparent scoring** — every result carries a `trustScore` (0–100), a High/Medium/Low `verdict`, and ordered `evidence` explaining how the score was reached.
 - **Batch verification** — paste up to 100 inputs at once; inputs are verified concurrently with live progress, then sortable and filterable in a results table.
 - **Local history** — past verifications persist in `localStorage` (newest first, capped at 20) and can be reopened with one click.
 - **Analytics dashboard** — status/type distribution, trust-score buckets, average score per type, recent streaks, and top verified types, all computed client-side.
@@ -50,9 +51,15 @@ Verification flow inside the API:
 ```
 input ─▶ classifier (domain | url | email | ipv4 | ipv6 | company | phone | unknown)
       ─▶ verifier  (DNS, HTTP(S), TLS, SMTP/email rules, WHOIS/company, phone format, …)
-      ─▶ scoring.Builder ─▶ status + trustScore + ordered evidence
-      ─▶ JSON response
+      ─▶ analysis  (claims ─▶ warnings ─▶ interpretations ─▶ reasoning ─▶ recommendations)
+      ─▶ explainable result (score + verdict + evidence + claim + interpretations + …)
 ```
+
+The analysis layer is modular. Each stage lives in its own package
+(`internal/claims`, `internal/warnings`, `internal/interpretations`,
+`internal/reasoning`, `internal/recommendations`) and is orchestrated by
+`internal/analysis`. Future capabilities plug in through the `Module`
+interface — see [Explainable analysis](#explainable-analysis).
 
 ## Tech stack
 
@@ -74,6 +81,13 @@ trustcheck/
 │  │  ├─ function/api/          # Netlify Function entry point (serverless)
 │  │  └─ internal/
 │  │     ├─ server/             # shared HTTP router (used by both entry points)
+│  │     ├─ model/              # shared explainable-analysis result types (leaf)
+│  │     ├─ analysis/           # pipeline orchestrator + pluggable Module interface
+│  │     ├─ claims/             # main claim, entities, keywords extraction
+│  │     ├─ warnings/           # misinformation signal detection
+│  │     ├─ interpretations/    # 2–3 alternative readings of the input
+│  │     ├─ reasoning/          # score explanation bullets
+│  │     ├─ recommendations/    # next-step advice per input type
 │  │     ├─ spec/               # embedded OpenAPI 3.1 specification
 │  │     ├─ classifier/         # input type detection
 │  │     ├─ verifier/           # per-type verification engines
@@ -83,7 +97,7 @@ trustcheck/
 │  └─ web/                      # Next.js 15 frontend
 │     └─ src/
 │        ├─ app/                # pages, layout, manifest, metadata, error pages
-│        ├─ components/         # UI components
+│        ├─ components/         # UI components (incl. analysis result sections)
 │        ├─ hooks/              # history + batch verification
 │        ├─ utils/              # api client, analytics, report export, history, time helpers
 │        └─ types.ts            # shared TypeScript types
@@ -206,13 +220,80 @@ curl -X POST http://localhost:8080/verify \
     { "label": "HTTPS Available", "result": "pass", "points": 20 },
     { "label": "TLS Certificate Present", "result": "pass", "points": 20 },
     { "label": "HTTP Status OK", "result": "pass", "points": 20 }
+  ],
+  "verdict": "Medium",
+  "keyClaim": "The claim under review is that domain \"google.com\" is legitimate and trustworthy.",
+  "entities": [{ "name": "google.com", "kind": "organization" }],
+  "keywords": [],
+  "evidenceFor": [
+    { "label": "DNS Resolves", "result": "pass", "points": 0 },
+    { "label": "HTTPS Available", "result": "pass", "points": 20 },
+    { "label": "TLS Certificate Present", "result": "pass", "points": 20 },
+    { "label": "HTTP Status OK", "result": "pass", "points": 20 }
+  ],
+  "evidenceAgainst": [],
+  "missingEvidence": [
+    "Not verified: WHOIS registration data.",
+    "Not verified: TLS certificate chain.",
+    "Not verified: Domain reputation history."
+  ],
+  "unknownInformation": [
+    "The real-world ownership of this identifier is unknown.",
+    "How this identifier is used in practice (legitimate or malicious) is unknown."
+  ],
+  "interpretations": [
+    { "title": "Genuine identifier", "explanation": "…", "confidence": 80, "reasoning": "…" },
+    {
+      "title": "Lookalike or impersonation",
+      "explanation": "…",
+      "confidence": 45,
+      "reasoning": "…"
+    },
+    { "title": "Origin unknown", "explanation": "…", "confidence": 50, "reasoning": "…" }
+  ],
+  "warningSignals": [],
+  "confidence": 90,
+  "reasoning": [
+    "Trust score of 60 out of 100 reflects the checks that could be run against the input.",
+    "+ DNS Resolves",
+    "+ HTTPS Available",
+    "No contradicting evidence was found."
+  ],
+  "recommendations": [
+    { "title": "Check WHOIS registration", "description": "…" },
+    { "title": "Run a link scanner", "description": "…" }
   ]
 }
 ```
 
-`type` is one of `domain`, `url`, `email`, `ipv4`, `ipv6`, `company`, `phone`, `unknown`. `status` is one of `verified`, `warning`, `invalid`, `private`, `local`, `unreachable`, `suggestion`, `unknown`, `not_implemented`. Evidence `result` is one of `pass`, `warning`, `fail`, `info`.
+`type` is one of `domain`, `url`, `email`, `ipv4`, `ipv6`, `company`, `phone`, `unknown`. `status` is one of `verified`, `warning`, `invalid`, `private`, `local`, `unreachable`, `suggestion`, `unknown`, `not_implemented`. Evidence `result` is one of `pass`, `warning`, `fail`, `info`. The `verdict` is `High` (score ≥ 70), `Medium` (40–69), or `Low` (< 40).
 
 There is also a health check: `GET /health` → `{ "status": "ok", "service": "trustcheck-api" }`.
+
+## Explainable analysis
+
+Every `/verify` response is built by a modular analysis pipeline. It answers, for any input:
+
+- **What is the main claim?** — the `keyClaim` is extracted before scoring; `entities` and `keywords` identify what matters.
+- **How was this result reached?** — the `timeline` walks the six stages of the analysis (claim detected → evidence gathered → conflicts identified → risk signals detected → AI reasoning → final assessment). Each step has a one-line summary and expandable details, and it is rendered first on the result page.
+- **What supports / contradicts it?** — scored checks are split into `evidenceFor` and `evidenceAgainst`; checks that could not be run are listed explicitly in `missingEvidence`, and genuinely unknown facts (author, ownership, provenance) in `unknownInformation`. Nothing is ever fabricated.
+- **What are alternative interpretations?** — 2–3 readings are always returned so a single meaning is never assumed.
+- **Why is the score what it is?** — the `reasoning` bullets and the High/Medium/Low `verdict` explain the score.
+- **What should the user verify next?** — `recommendations` list concrete next steps.
+- **How sure is the analysis?** — `confidence` (0–100) measures how much evidence the analysis collected, not the trust score itself.
+
+### Pluggable modules
+
+The pipeline is extensible. Any future capability — live web search, fact-check integrations, reverse image search, citation verification, academic source lookup, news timeline, AI hallucination detection, bias detection, source reputation databases, user feedback learning — implements the `Module` interface in `internal/analysis` and registers itself with the `Analyzer`:
+
+```go
+type Module interface {
+    Name() string
+    Enrich(ctx context.Context, input string, result *model.Result) error
+}
+```
+
+Modules run after the core stages and may amend the result in place. A failing module never breaks the analysis: it degrades to a low-severity warning signal. The backend is deployed from the same code with no extra infrastructure required.
 
 ## API Documentation
 
