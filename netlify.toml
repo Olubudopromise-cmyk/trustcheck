@@ -1,0 +1,37 @@
+# Netlify configuration for the TrustCheck site.
+#
+# The repository is a pnpm/Turbo monorepo. The base directory is the
+# repository root, so every path below is absolute relative to that root.
+# Netlify installs dependencies at the root (pnpm is detected via
+# pnpm-lock.yaml) and runs the build command; only the web app is built by
+# the site build. The Go API is compiled by Netlify as a Function from
+# apps/api/function and served at /api on the same origin.
+
+[build]
+  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build"
+  publish = "apps/web/.next"
+
+[build.environment]
+  # Force pnpm so the workspace install never falls back to npm in CI.
+  NETLIFY_USE_PNPM = "true"
+  NODE_VERSION = "22"
+  # Must be >= the `go` directive in apps/api/go.mod (1.23.0).
+  GO_VERSION = "1.23.3"
+
+[functions]
+  # The Go Function lives inside the apps/api Go module so Netlify compiles
+  # it against the same go.mod/go.sum (the function is named "api").
+  directory = "apps/api/function"
+
+[[plugins]]
+  # Netlify's Next.js runtime: serves the .next build output from apps/web.
+  package = "@netlify/plugin-nextjs"
+
+# Expose the TrustCheck API Function at a clean /api prefix on the same
+# origin as the frontend. status = 200 rewrites the request to the Function
+# while preserving the original path, so /api/verify reaches the Function with
+# event.path = /api/verify (see apps/api/function/api/main.go).
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api"
+  status = 200

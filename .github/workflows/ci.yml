@@ -30,10 +30,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Setup Go 1.24
+      - name: Setup Go 1.23
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          # Matches GO_VERSION in netlify.toml (the deploy toolchain).
+          go-version: '1.23.3'
           cache: true
           cache-dependency-path: apps/api/go.sum
 

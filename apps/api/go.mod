@@ -3,6 +3,8 @@ module github.com/pamierin/trustcheck/apps/api
 go 1.23.0
 
 require (
+	github.com/aws/aws-lambda-go v1.54.0
+	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
 	github.com/gin-gonic/gin v1.11.0
 	github.com/swaggest/swgui v1.8.9
 )
@@ -22,7 +24,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import type { VerifyResponse } from '../types';
+import { verify } from '../utils/api';
 
 export const BATCH_MAX_INPUTS = 100;
 
@@ -38,8 +39,6 @@ export function parseBatchInput(text: string): string[] {
   return inputs;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
 // useBatchVerification verifies a list of inputs concurrently against the
 // existing /verify endpoint. Promise.allSettled keeps one failed request from
 // blocking the rest, and progress is reported live as each request settles.
@@ -64,16 +63,7 @@ export function useBatchVerification() {
 
       const tasks = items.map(async (item, index) => {
         try {
-          const res = await fetch(`${API_URL}/verify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input: item.input }),
-          });
-          if (!res.ok) {
-            const err: { error?: string } = await res.json().catch(() => ({}));
-            throw new Error(err.error || `Verification failed (HTTP ${res.status}).`);
-          }
-          const data = (await res.json()) as VerifyResponse;
+          const data = await verify(item.input);
           items[index] = { ...item, success: true, result: data };
           onVerified?.(item.input, data);
         } catch (e) {

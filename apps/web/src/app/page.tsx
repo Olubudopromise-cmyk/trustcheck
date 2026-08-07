@@ -15,8 +15,7 @@ import ThemeToggle from '../components/ThemeToggle';
 import { useBatchVerification, parseBatchInput } from '../hooks/useBatchVerification';
 import { useVerificationHistory } from '../hooks/useVerificationHistory';
 import type { VerificationHistoryItem, VerifyResponse } from '../types';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { verify } from '../utils/api';
 
 export default function HomePage() {
   const [input, setInput] = useState('');
@@ -38,16 +37,7 @@ export default function HomePage() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: trimmed }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Verification failed (HTTP ${res.status}).`);
-      }
-      const data = (await res.json()) as VerifyResponse;
+      const data = await verify(trimmed);
       setResult(data);
       remember(trimmed, data);
     } catch (e) {

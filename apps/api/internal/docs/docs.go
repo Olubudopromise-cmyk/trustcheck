@@ -4,11 +4,8 @@
 package docs
 
 const (
-	// OpenAPIYAML is the location of the OpenAPI 3.1 specification,
-	// relative to the API module root (apps/api/openapi.yaml).
-	OpenAPIYAML = "openapi.yaml"
-
 	// OpenAPIPath is the HTTP path at which the specification is served.
+	// The OpenAPI document itself is embedded via internal/spec.
 	OpenAPIPath = "/openapi.yaml"
 
 	// DocsPath is the HTTP path at which the interactive Swagger UI is served.

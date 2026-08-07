@@ -20,6 +20,7 @@ coverage/
 .idea/
 
 # Go build output
+apps/api/bin/
 apps/api/api
 
 # TypeScript build info

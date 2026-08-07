@@ -6,13 +6,13 @@ TrustCheck verifies a target, scores its trustworthiness, and explains the verdi
 
 ## Live Demo
 
-|            | URL                                        |
-| ---------- | ------------------------------------------ |
-| Frontend   | https://trustcheck-web.up.railway.app      |
-| API        | https://trustcheck-api.up.railway.app      |
-| Swagger UI | https://trustcheck-api.up.railway.app/docs |
+|            | URL                                                   |
+| ---------- | ----------------------------------------------------- |
+| Frontend   | `https://<site>.netlify.app` (set after first deploy) |
+| API        | `https://<site>.netlify.app/api`                      |
+| Swagger UI | `https://<site>.netlify.app/api/docs`                 |
 
-> **Note:** these URLs are provisioned when the project is first deployed to Railway (see [Deployment](#deployment)). Both services are served over HTTPS by Railway, so there are no mixed-content warnings. Until then, run locally with [Running the backend](#running-the-backend) + [Running the frontend](#running-the-frontend).
+> The frontend and API are served from the **same origin** on Netlify: the frontend calls the Go API through the `/api/*` rewrite, so there are no CORS or mixed-content concerns. Until deployed, run locally with [Running the backend](#running-the-backend) + [Running the frontend](#running-the-frontend).
 
 ## Features
 
@@ -27,17 +27,23 @@ TrustCheck verifies a target, scores its trustworthiness, and explains the verdi
 
 ## Architecture
 
+TrustCheck is a pnpm/Turbo monorepo with two deployables, both hosted on **Netlify** as a single site:
+
 ```
-┌───────────────────────────────┐         ┌───────────────────────────────┐
-│         Web (Next.js 15)      │   HTTP  │          API (Go + Gin)       │
-│      apps/web · :3000         │ ─────▶  │       apps/api · :8080        │
-│                               │  POST   │                               │
-│  SearchForm / BatchInput      │ /verify │  classify ─▶ verify ─▶ score  │
-│  ResultCard / BatchResults    │         │                               │
-│  History  ·  Analytics        │ ◀────── │  { status, trustScore,        │
-│  Export JSON / PDF            │   JSON  │    summary, evidence[] }      │
-└───────────────────────────────┘         └───────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                     Netlify site (same origin)                │
+│                                                               │
+│  Browser ──▶ Next.js web app ──▶ /api/* ──▶ Go API Function  │
+│              apps/web (static)      rewrite    apps/api       │
+│                                                               │
+│  <site>.netlify.app                 /api/verify, /api/health  │
+│                                     /api/docs (Swagger UI)    │
+└───────────────────────────────────────────────────────────────┘
 ```
+
+- The **web app** (`apps/web`) is a Next.js 15 app built to `.next` and served by Netlify's Next.js runtime.
+- The **API** (`apps/api`) is a Go + Gin server compiled by Netlify as a **Function** mounted at `/api`. Both entry points share the exact same router (`internal/server`), so local behavior matches production.
+- The frontend calls the API with a relative `/api/verify` path in production (see [`apps/web/src/utils/api.ts`](apps/web/src/utils/api.ts)); locally it falls back to `http://localhost:8080`.
 
 Verification flow inside the API:
 
@@ -54,6 +60,7 @@ input ─▶ classifier (domain | url | email | ipv4 | ipv6 | company | phone | 
 | -------- | ---------------------------------------------- |
 | Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
 | Backend  | Go, Gin, net/http                              |
+| Hosting  | Netlify (site + Functions + Next.js runtime)   |
 | Tooling  | pnpm workspaces, Turbo, ESLint, Prettier       |
 | Storage  | Browser `localStorage` (history only)          |
 
@@ -62,27 +69,31 @@ input ─▶ classifier (domain | url | email | ipv4 | ipv6 | company | phone | 
 ```
 trustcheck/
 ├─ apps/
-│  ├─ api/                      # Go + Gin backend
-│  │  ├─ main.go                # server, CORS, /health, /verify
+│  ├─ api/                      # Go + Gin backend (Go module)
+│  │  ├─ cmd/api/               # local dev server entry point (go run ./cmd/api)
+│  │  ├─ function/api/          # Netlify Function entry point (serverless)
 │  │  └─ internal/
+│  │     ├─ server/             # shared HTTP router (used by both entry points)
+│  │     ├─ spec/               # embedded OpenAPI 3.1 specification
 │  │     ├─ classifier/         # input type detection
 │  │     ├─ verifier/           # per-type verification engines
-│  │     └─ scoring/            # trust score & evidence builder
+│  │     ├─ scoring/            # trust score & evidence builder
+│  │     ├─ logging/            # structured JSON request logging
+│  │     └─ ratelimit/          # in-memory token-bucket rate limiter
 │  └─ web/                      # Next.js 15 frontend
 │     └─ src/
 │        ├─ app/                # pages, layout, manifest, metadata, error pages
 │        ├─ components/         # UI components
 │        ├─ hooks/              # history + batch verification
-│        ├─ utils/              # analytics, report export, history, time helpers
+│        ├─ utils/              # api client, analytics, report export, history, time helpers
 │        └─ types.ts            # shared TypeScript types
-├─ packages/                    # scaffolded shared workspaces
 ├─ docs/                        # API, architecture, PRD, user-flow docs
-└─ infrastructure/              # deployment scaffolding
+└─ netlify.toml                 # Netlify build, functions, and redirect config
 ```
 
 ## Installation
 
-Requires **Node.js ≥ 20**, **pnpm ≥ 9.15**, and **Go ≥ 1.22**.
+Requires **Node.js ≥ 20**, **pnpm ≥ 9.15**, and **Go ≥ 1.23**.
 
 ```bash
 git clone https://github.com/pamierin/trustcheck.git
@@ -105,66 +116,73 @@ pnpm --filter @trustcheck/web start
 
 ```bash
 cd apps/api
-go run .          # listens on :8080
+go run ./cmd/api          # listens on :8080 (or $PORT)
 ```
 
-## Docker
-
-Run the whole stack (frontend + backend) with a single command:
-
-```bash
-docker compose up --build
-```
-
-- **Frontend:** http://localhost:3000
-- **Backend:** http://localhost:8080
-
-Both images use multi-stage production builds (the Go API compiles a static binary into a minimal Alpine runtime; the Next.js app builds the production bundle and runs `pnpm start`). Because `NEXT_PUBLIC_API_URL` is inlined at build time and the frontend fetches from the _browser_, the web image is built with `NEXT_PUBLIC_API_URL=http://localhost:8080` (the API's published host port) so browser requests reach the API.
-
-> For a production deployment behind a reverse proxy, the cleanest setup is to have Nginx (or Caddy) terminate TLS and proxy `/verify` to the API service — then the frontend only ever calls relative `/verify` and no container service name leaks into the browser.
+The API responds on `/health`, `/verify`, `/docs`, and `/openapi.yaml`.
 
 ## Environment variables
 
-| Variable               | Scope | Default                 | Purpose                              |
-| ---------------------- | ----- | ----------------------- | ------------------------------------ |
-| `NEXT_PUBLIC_API_URL`  | web   | `http://localhost:8080` | Backend URL the frontend calls       |
-| `NEXT_PUBLIC_SITE_URL` | web   | `http://localhost:3000` | Canonical site URL for SEO/OpenGraph |
-| `ALLOWED_ORIGIN`       | api   | `http://localhost:3000` | CORS origin allowed to call the API  |
+All environment variables are read from the environment (or a `.env` file, which is git-ignored). Copy `.env.example` to `.env` and adjust as needed.
 
-Copy `apps/web/.env.example` to `apps/web/.env.local` (or set the root `.env`) and adjust as needed.
+| Variable               | Scope | Default                                     | Purpose                                                                                                                       |
+| ---------------------- | ----- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL`  | web   | `''` (prod) / `http://localhost:8080` (dev) | Backend URL the browser calls. Leave **unset** in production so the Netlify Function is reached at `/api` on the same origin. |
+| `NEXT_PUBLIC_SITE_URL` | web   | `http://localhost:3000`                     | Canonical site URL for SEO/OpenGraph metadata                                                                                 |
+| `ALLOWED_ORIGIN`       | api   | `http://localhost:3000`                     | CORS origin allowed to call the API (local development only)                                                                  |
 
-## Deployment
+The API reads `PORT` (default `8080`) and `ALLOWED_ORIGIN` at runtime; it has no other secrets. Nothing sensitive is ever committed — see [.env.example](.env.example) and `apps/web/.env.example`.
 
-TrustCheck is deployed on **Railway** as two services in one project, built from the existing `Dockerfile`s. Both get HTTPS automatically from Railway (valid certificates on `*.up.railway.app`), so the frontend → API calls are HTTPS-to-HTTPS with no mixed-content warnings.
+## Deployment (Netlify)
 
-| Service            | Root Directory  | Config                                           | Port                       |
-| ------------------ | --------------- | ------------------------------------------------ | -------------------------- |
-| Backend (Go API)   | `apps/api`      | [`apps/api/railway.toml`](apps/api/railway.toml) | `$PORT` (Railway-injected) |
-| Frontend (Next.js) | `/` (repo root) | [`railway.toml`](railway.toml)                   | 3000                       |
+TrustCheck deploys as a **single Netlify site** that serves both the Next.js frontend and the Go API. The site is configured entirely in [`netlify.toml`](netlify.toml): the build runs from the repository root (pnpm monorepo), publishes `apps/web/.next` through Netlify's Next.js runtime, and compiles the Go API from `apps/api/function` as a Function.
 
-### Environment variables
+### Automatic deploys
 
-| Variable              | Service | Purpose                                                                                                                            |
-| --------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_URL` | web     | Public API URL (no localhost). Inlined into the client bundle at build time; Railway passes it to the Dockerfile's matching `ARG`. |
-| `ALLOWED_ORIGIN`      | api     | Public frontend URL, for CORS (e.g. `https://trustcheck-web.up.railway.app`).                                                      |
+Connect the GitHub repository to Netlify once, and deploys are automatic:
 
-### Deploy steps
+- **Production** — every push to `main` builds and deploys.
+- **Preview** — every pull request gets its own deploy preview URL (with its own API Function).
 
-1. `railway login` (or set a `RAILWAY_TOKEN`).
-2. `railway init` to create a project, then `railway link` to select a service for each directory.
-3. From the repo root (frontend service): `railway up` — Root Directory `/`, config [`railway.toml`](railway.toml).
-4. From `apps/api` (backend service): `railway up` — Root Directory `apps/api`, config [`apps/api/railway.toml`](apps/api/railway.toml).
-5. Set the variables above on each service (dashboard or `railway variables`).
-6. Confirm `https://<api-url>/health`, `https://<api-url>/docs`, and the frontend URL respond; then update the [Live Demo](#live-demo) table.
+No deployment scripts or CI deploy steps are required.
 
-Alternatively, connect the GitHub repository and set each service's Root Directory to the values above — the `railway.toml` files are picked up automatically.
+### Manual steps (one-time)
+
+1. **Create the site** — Netlify → _Add new site_ → _Import an existing project_ → pick this repository.
+2. **Verify build settings** — Netlify reads `netlify.toml` automatically. Confirm:
+   - Build command: `pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build`
+   - Publish directory: `apps/web/.next`
+   - Functions directory: `apps/api/function`
+3. **Set environment variables** in _Site configuration → Environment variables_:
+   - `NEXT_PUBLIC_SITE_URL` → your production URL (e.g. `https://trustcheck.netlify.app`).
+   - Leave `NEXT_PUBLIC_API_URL` **unset** so the frontend uses the same-origin `/api`.
+4. **Deploy** — push to `main` (or trigger a deploy). After the first successful deploy:
+   - The API is live at `https://<site>/api/health`.
+   - Swagger UI is live at `https://<site>/api/docs`.
+   - Update the [Live Demo](#live-demo) table with your URLs.
+
+> **Note on deploy previews:** preview URLs work out of the box — each preview deploys its own API Function, so `NEXT_PUBLIC_API_URL` must remain unset (the same-origin `/api` resolves against the preview URL).
+
+### How the API is served
+
+Netlify compiles Go Functions from the `apps/api/function` directory using the Lambda Go runtime. The `api` function reuses the router from `internal/server` and is exposed at `/api/*` via the rewrite in `netlify.toml`:
+
+```toml
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api"
+  status = 200
+```
+
+Because Netlify 200-rewrites preserve the original request path, the function receives `event.path = /api/verify` and routes it exactly like the local server — including `/api/health`, `/api/docs`, and `/api/openapi.yaml`.
 
 ## API
 
 ### Endpoint
 
 `POST /verify` — accepts a JSON body `{ "input": "<target>" }`.
+
+Locally: `http://localhost:8080/verify` · On Netlify: `https://<site>/api/verify`
 
 ### Example request
 
@@ -198,13 +216,16 @@ There is also a health check: `GET /health` → `{ "status": "ok", "service": "t
 
 ## API Documentation
 
-The API is described by an OpenAPI 3.1 specification at [`apps/api/openapi.yaml`](apps/api/openapi.yaml). An interactive Swagger UI is served by the backend itself (no CDN dependencies — the UI is bundled into the binary) at:
+The API is described by an OpenAPI 3.1 specification at [`apps/api/internal/spec/openapi.yaml`](apps/api/internal/spec/openapi.yaml). An interactive Swagger UI is served by the backend itself (no CDN dependencies — the UI is bundled into the binary):
 
 ```
-http://localhost:8080/docs
+http://localhost:8080/docs          # local development
+https://<site>.netlify.app/api/docs # production
 ```
 
-The raw specification is also served at `http://localhost:8080/openapi.yaml`, so you can pipe it into any OpenAPI-compatible tool, e.g. `curl http://localhost:8080/openapi.yaml | npx swagger-cli validate`.
+The raw specification is served alongside it (`/openapi.yaml` locally, `/api/openapi.yaml` on Netlify), so you can pipe it into any OpenAPI-compatible tool, e.g. `curl http://localhost:8080/openapi.yaml | npx swagger-cli validate`.
+
+> **Note:** the OpenAPI document's `servers` block points at the local development server. On Netlify the live endpoints live under `/api` — the paths in the spec are the logical API routes; the `/api` prefix is an infrastructure detail.
 
 ## Screenshots
 
@@ -230,13 +251,13 @@ go test ./...
 
 Every push and pull request to `main` runs the full quality gate on GitHub Actions (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
 
-- `lint` — frontend and shared packages (ESLint via Turbo)
+- `lint` — frontend (ESLint via Turbo)
 - production `build` — Next.js production bundle
-- `build` — Go backend compiles
+- `build` — Go backend compiles (including the Netlify Function entry point)
 - `vet` — Go static analysis
 - `test` — Go unit tests
 
-The workflow uses pinned toolchains (Node 22, Go 1.24, pnpm 9.15) and caches the pnpm store, Go modules, and the Go build cache so installs are reproducible and runs stay fast. The job fails if any step fails.
+The workflow uses pinned toolchains (Node 22, Go 1.23.3, pnpm 9.15) and caches the pnpm store, Go modules, and the Go build cache so installs are reproducible and runs stay fast. The job fails if any step fails.
 
 ## Structured Logging
 
@@ -249,7 +270,7 @@ Every API request produces **exactly one** structured JSON log line on stdout. E
   "msg": "request completed",
   "requestId": "c3ef4c8f1f2a3b4c5d6e7f809a1b2c3d4",
   "method": "POST",
-  "path": "/verify",
+  "path": "/api/verify",
   "status": 200,
   "latencyMs": 18,
   "clientIP": "127.0.0.1",
@@ -261,6 +282,8 @@ Every API request produces **exactly one** structured JSON log line on stdout. E
 ```
 
 `/verify` requests additionally include `inputType`, `verificationStatus`, and `trustScore` (from the verification result, never the raw input). Requests that complete with an HTTP status of 400 or higher are logged at `ERROR` level with an additional `error` field describing the failure.
+
+On Netlify, the function's stdout appears in **Function logs** under _Site configuration → Logs → Functions_ (AWS CloudWatch behind the scenes), so you can correlate `X-Request-ID` values from the browser with server logs.
 
 ## Rate Limiting
 
@@ -280,6 +303,8 @@ Retry-After: 1
 ```
 
 The `Retry-After` header is the number of seconds until the client may send another request. Idle clients are removed periodically by a background cleanup goroutine, so memory usage stays bounded. 429 responses appear in the structured request logs like any other response.
+
+> **Serverless note:** on Netlify the API runs as a serverless Function, so the in-memory limiter is **per warm instance** rather than globally shared. It still protects individual instances from bursts; a truly global limit would require external storage.
 
 Why it exists: `/verify` performs live DNS, HTTPS, and registry lookups, so it is the endpoint most worth protecting from accidental bursts, scraping, and abuse — without adding external infrastructure.
 

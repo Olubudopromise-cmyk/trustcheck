@@ -7,3 +7,4 @@ turbo
 .env
 .env.*
 pnpm-lock.yaml
+netlify.toml
