@@ -115,6 +115,20 @@ export function renderReportHTML(result: VerifyResponse): string {
 
   const sections: string[] = [];
 
+  if (result.timeline?.length) {
+    const timelineItems = result.timeline
+      .map(
+        (step) =>
+          `<li><strong>${escapeHtml(step.title)}</strong> — ${escapeHtml(step.summary)}${
+            step.details.length
+              ? `<ul>\n${step.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('\n')}\n</ul>`
+              : ''
+          }</li>`,
+      )
+      .join('\n');
+    sections.push(`<h2>Reasoning Timeline</h2><ol>\n${timelineItems}\n</ol>`);
+  }
+
   if (result.keyClaim) {
     sections.push(`<h2>Main Claim</h2><p>${escapeHtml(result.keyClaim)}</p>`);
   }

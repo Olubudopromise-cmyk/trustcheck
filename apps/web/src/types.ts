@@ -42,6 +42,12 @@ export interface Recommendation {
   description: string;
 }
 
+export interface ReasoningStep {
+  title: string;
+  summary: string;
+  details: string[];
+}
+
 export type VerifyResponse = {
   input: string;
   type: string;
@@ -63,6 +69,7 @@ export type VerifyResponse = {
   warningSignals?: WarningSignal[];
   confidence?: number;
   reasoning?: string[];
+  timeline?: ReasoningStep[];
   recommendations?: Recommendation[];
 };
 

@@ -10,6 +10,7 @@ import InterpretationsList from './InterpretationsList';
 import MainClaimSection from './MainClaimSection';
 import ReasoningList from './ReasoningList';
 import RecommendationsList from './RecommendationsList';
+import ReasoningTimeline from './ReasoningTimeline';
 import StatusBadge from './StatusBadge';
 import TrustScore from './TrustScore';
 import TypeIcon, { typeLabel } from './TypeIcon';
@@ -100,6 +101,12 @@ function ResultCard({ result }: { result: VerifyResponse }) {
         <LegacyResult result={result} />
       ) : (
         <>
+          {/* Reasoning timeline — first section, so the path from claim to
+              verdict is visible before the detailed breakdown. */}
+          <div className="mt-3">
+            <ReasoningTimeline steps={result.timeline} />
+          </div>
+
           {/* Overall assessment */}
           <section
             aria-label="Overall assessment"
