@@ -41,6 +41,7 @@ func TestVerifyResponse_IncludesLegacyAndAnalysisFields(t *testing.T) {
 		"verdict", "keyClaim", "entities", "keywords",
 		"evidenceFor", "evidenceAgainst", "missingEvidence", "unknownInformation",
 		"interpretations", "warningSignals", "confidence", "reasoning", "recommendations",
+		"timeline",
 	} {
 		if _, ok := resp[field]; !ok {
 			t.Errorf("analysis field %q missing from response", field)
@@ -59,6 +60,9 @@ func TestVerifyResponse_IncludesLegacyAndAnalysisFields(t *testing.T) {
 	}
 	if arr, ok := resp["recommendations"].([]interface{}); !ok || len(arr) == 0 {
 		t.Error("recommendations should not be empty")
+	}
+	if arr, ok := resp["timeline"].([]interface{}); !ok || len(arr) != 6 {
+		t.Errorf("timeline should contain 6 reasoning steps, got %d", len(arr))
 	}
 }
 

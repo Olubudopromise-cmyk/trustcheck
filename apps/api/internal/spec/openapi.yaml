@@ -224,11 +224,34 @@ components:
           items:
             type: string
           description: Bullet explanation of why the trust score is what it is. "+" bullets support, "-" bullets contradict.
+        timeline:
+          type: array
+          description: The step-by-step reasoning timeline shown at the top of the analysis.
+          items:
+            $ref: '#/components/schemas/ReasoningStep'
         recommendations:
           type: array
           description: Actionable next steps for the user.
           items:
             $ref: '#/components/schemas/Recommendation'
+    ReasoningStep:
+      type: object
+      required:
+        - title
+        - summary
+        - details
+      properties:
+        title:
+          type: string
+          description: Name of the step, e.g. "Claim Detected" or "Evidence Gathered".
+        summary:
+          type: string
+          description: One-line, user-facing summary of this step.
+        details:
+          type: array
+          items:
+            type: string
+          description: Expandable detail lines. Only user-facing explanations grounded in observable evidence; never chain-of-thought.
     Verdict:
       type: string
       description: Coarse human-facing trust band derived from the trust score.

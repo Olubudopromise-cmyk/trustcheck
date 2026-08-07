@@ -52,6 +52,7 @@ type verifyResponse struct {
 	WarningSignals     []model.WarningSignal  `json:"warningSignals"`
 	Confidence         int                    `json:"confidence"`
 	Reasoning          []string               `json:"reasoning"`
+	Timeline           []model.ReasoningStep  `json:"timeline"`
 	Recommendations    []model.Recommendation `json:"recommendations"`
 }
 
@@ -139,6 +140,7 @@ func NewRouter(prefix string) *gin.Engine {
 			WarningSignals:     result.WarningSignals,
 			Confidence:         result.Confidence,
 			Reasoning:          result.Reasoning,
+			Timeline:           result.Timeline,
 			Recommendations:    result.Recommendations,
 		})
 	})
