@@ -103,13 +103,107 @@ export function renderReportHTML(result: VerifyResponse): string {
     ['Type', escapeHtml(result.type)],
     ['Status', escapeHtml(result.status)],
     ['Trust Score', `${result.trustScore} / 100`],
+    ['Verdict', escapeHtml(result.verdict ?? '')],
     ['Summary', escapeHtml(result.summary)],
   ]
+    .filter(([, value]) => value !== '')
     .map(
       ([label, value]) =>
         `<div class="row"><div class="row-label">${label}</div><div class="row-value">${value}</div></div>`,
     )
     .join('\n');
+
+  const sections: string[] = [];
+
+  if (result.keyClaim) {
+    sections.push(`<h2>Main Claim</h2><p>${escapeHtml(result.keyClaim)}</p>`);
+  }
+
+  if (result.entities?.length || result.keywords?.length) {
+    const entityItems = (result.entities ?? [])
+      .map(
+        (e) =>
+          `<li>${escapeHtml(e.name)} <em style="color:#64748b">(${escapeHtml(e.kind)})</em></li>`,
+      )
+      .join('\n');
+    const keywordItems = (result.keywords ?? []).map((k) => `<li>${escapeHtml(k)}</li>`).join('\n');
+    if (entityItems) {
+      sections.push(`<h2>Entities</h2><ul>\n${entityItems}\n</ul>`);
+    }
+    if (keywordItems) {
+      sections.push(`<h2>Keywords</h2><ul>\n${keywordItems}\n</ul>`);
+    }
+  }
+
+  const itemList = (
+    items: { label: string; result: keyof typeof EVIDENCE_ICONS }[],
+    empty: string,
+  ) => {
+    if (!items.length) {
+      return `<li style="color:#64748b">${empty}</li>`;
+    }
+    return items
+      .map((item) => {
+        const icon = EVIDENCE_ICONS[item.result] ?? EVIDENCE_ICONS.info;
+        const color = EVIDENCE_COLORS[item.result] ?? EVIDENCE_COLORS.info;
+        return `<li style="color:${color}"><span aria-hidden="true">${icon}</span> ${escapeHtml(item.label)}</li>`;
+      })
+      .join('\n');
+  };
+
+  sections.push(
+    `<h2>Supporting Evidence</h2><ul>\n${itemList(result.evidenceFor ?? [], 'No supporting evidence was found.')}\n</ul>`,
+  );
+  sections.push(
+    `<h2>Contradicting Evidence</h2><ul>\n${itemList(result.evidenceAgainst ?? [], 'No contradicting evidence was found.')}\n</ul>`,
+  );
+
+  if (result.missingEvidence?.length) {
+    sections.push(
+      `<h2>Missing Evidence</h2><ul>\n${result.missingEvidence.map((m) => `<li>${escapeHtml(m)}</li>`).join('\n')}\n</ul>`,
+    );
+  }
+  if (result.unknownInformation?.length) {
+    sections.push(
+      `<h2>Unknown Information</h2><ul>\n${result.unknownInformation.map((m) => `<li>${escapeHtml(m)}</li>`).join('\n')}\n</ul>`,
+    );
+  }
+
+  if (result.interpretations?.length) {
+    const interpItems = result.interpretations
+      .map(
+        (i) =>
+          `<li><strong>${escapeHtml(i.title)}</strong> (${i.confidence}%)<br />${escapeHtml(
+            i.explanation,
+          )}<br /><em style="color:#64748b">${escapeHtml(i.reasoning)}</em></li>`,
+      )
+      .join('\n');
+    sections.push(`<h2>Possible Interpretations</h2><ul>\n${interpItems}\n</ul>`);
+  }
+
+  if (result.warningSignals?.length) {
+    const warningItems = result.warningSignals
+      .map(
+        (w) =>
+          `<li><strong>${escapeHtml(w.label)}</strong> <em style="color:#64748b">(${escapeHtml(w.severity)})</em><br />${escapeHtml(w.description)}</li>`,
+      )
+      .join('\n');
+    sections.push(`<h2>Warning Signals</h2><ul>\n${warningItems}\n</ul>`);
+  }
+
+  if (result.recommendations?.length) {
+    const recItems = result.recommendations
+      .map(
+        (r) => `<li><strong>${escapeHtml(r.title)}</strong><br />${escapeHtml(r.description)}</li>`,
+      )
+      .join('\n');
+    sections.push(`<h2>Recommendations</h2><ul>\n${recItems}\n</ul>`);
+  }
+
+  if (result.reasoning?.length) {
+    const reasoningItems = result.reasoning.map((r) => `<li>${escapeHtml(r)}</li>`).join('\n');
+    sections.push(`<h2>Raw AI Reasoning</h2><ul>\n${reasoningItems}\n</ul>`);
+  }
 
   return `<!doctype html>
 <html lang="en">
@@ -142,6 +236,7 @@ export function renderReportHTML(result: VerifyResponse): string {
     <h1>Verification Report</h1>
     <hr />
 ${rows}
+${sections.join('\n')}
     <h2>Evidence</h2>
     <ul>
 ${evidenceItems}
