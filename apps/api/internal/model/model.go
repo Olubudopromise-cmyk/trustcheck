@@ -70,6 +70,17 @@ type Recommendation struct {
 	Description string `json:"description"`
 }
 
+// ReasoningStep is one stage of the analysis timeline. The timeline exposes
+// how the assessment was reached — claim detected, evidence gathered, conflicts
+// identified, risk signals, reasoning, final assessment — so the user reviews
+// an investigation rather than an unexplained score. Details is a concise,
+// user-facing list; it never contains chain-of-thought or internal reasoning.
+type ReasoningStep struct {
+	Title   string   `json:"title"`
+	Summary string   `json:"summary"`
+	Details []string `json:"details"`
+}
+
 // EvidenceItem is one scored check, bucketed into a supporting or
 // contradicting section. Note carries a plain-English explanation of the check.
 type EvidenceItem struct {
@@ -129,6 +140,10 @@ type Result struct {
 	// Reasoning is the ordered bullet explanation of why the score is what it
 	// is. Positive bullets are prefixed with "+", negative with "-".
 	Reasoning []string `json:"reasoning"`
+
+	// Timeline is the step-by-step reasoning timeline shown at the top of the
+	// analysis. Each step has a one-line summary and expandable details.
+	Timeline []ReasoningStep `json:"timeline"`
 
 	// Recommendations are the next steps the user should take.
 	Recommendations []Recommendation `json:"recommendations"`
