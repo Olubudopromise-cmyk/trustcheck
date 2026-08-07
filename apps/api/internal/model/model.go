@@ -31,6 +31,24 @@ func VerdictFromScore(score int) Verdict {
 	}
 }
 
+// StatusFromVerdict maps a verdict to the canonical status string used for
+// badges and report wording. Status is derived from the verdict (which is
+// derived from the trust score) so the two can never disagree.
+//
+//	High   -> "verified"
+//	Medium -> "warning"
+//	Low    -> "invalid"
+func StatusFromVerdict(v Verdict) string {
+	switch v {
+	case VerdictHigh:
+		return "verified"
+	case VerdictMedium:
+		return "warning"
+	default:
+		return "invalid"
+	}
+}
+
 // Entity is a named thing (person, organization, location, ...) extracted from
 // the input. Kind is one of the EntityKind constants.
 type Entity struct {

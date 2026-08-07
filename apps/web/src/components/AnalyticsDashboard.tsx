@@ -213,7 +213,7 @@ function AnalyticsDashboard({ history }: { history: VerificationHistoryItem[] })
             <div className="lg:col-span-2">
               <Card title="Last Verification">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <StatusBadge status={last.result.status} />
+                  <StatusBadge status={last.result.status} verdict={last.result.verdict} />
                   <span className="min-w-0 font-mono break-all text-sm text-slate-900 dark:text-slate-100">
                     {last.input}
                   </span>

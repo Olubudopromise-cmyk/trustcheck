@@ -56,6 +56,8 @@ function ReasoningTimeline({ steps }: { steps?: ReasoningStep[] }) {
                 <button
                   type="button"
                   aria-expanded={open}
+                  aria-controls={`timeline-details-${index}`}
+                  aria-label={`${step.title}: ${step.summary}`}
                   onClick={() => setOpenStep(open ? -1 : index)}
                   className="w-full rounded-lg px-2 py-1 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 dark:hover:bg-slate-800/60"
                 >
@@ -76,6 +78,7 @@ function ReasoningTimeline({ steps }: { steps?: ReasoningStep[] }) {
                 </button>
                 {open && (
                   <ul
+                    id={`timeline-details-${index}`}
                     role="list"
                     className="mt-2 space-y-1.5 border-l border-slate-200 pl-5 dark:border-slate-700"
                   >

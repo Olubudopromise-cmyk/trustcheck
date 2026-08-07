@@ -61,7 +61,7 @@ function HistoryList({ history, onReopen, onClear }: HistoryListProps) {
                     {item.input}
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                    <StatusBadge status={item.result.status} />
+                    <StatusBadge status={item.result.status} verdict={item.result.verdict} />
                     <span aria-hidden="true">•</span>
                     <span>
                       <span className="sr-only">score</span>

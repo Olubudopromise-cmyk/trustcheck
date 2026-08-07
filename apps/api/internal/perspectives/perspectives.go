@@ -17,6 +17,7 @@ import (
 
 	"github.com/pamierin/trustcheck/apps/api/internal/classifier"
 	"github.com/pamierin/trustcheck/apps/api/internal/model"
+	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 )
 
 // credibilityFromResult maps a scored check result to a user-facing
@@ -131,21 +132,18 @@ func SupportingEvidence(evidenceFor []model.EvidenceItem) []model.SourceGroup {
 	return groups
 }
 
-// engineFallbackLabels are generic engine messages ("I could not suggest
-// anything") rather than evidence about the claim, so they are never presented
-// as contradictions. Real failed checks and warnings still appear.
-var engineFallbackLabels = map[string]bool{
-	"No Suggestion": true,
-}
-
 // ContradictingEvidence turns each contradicting check into a structured
 // disagreement between the submitted claim and what the check observed. If no
 // contradicting evidence was found the list is empty; the caller never claims
 // a conflict exists when none was observed.
+//
+// Generic engine fallback messages are never treated as contradictions; the
+// shared scoring.IsEnginePlaceholder predicate is applied defensively in case
+// this function is called directly with unfiltered evidence.
 func ContradictingEvidence(keyClaim string, evidenceAgainst []model.EvidenceItem) []model.Contradiction {
 	var observed []model.EvidenceItem
 	for _, item := range evidenceAgainst {
-		if !engineFallbackLabels[item.Label] {
+		if !scoring.IsEnginePlaceholder(item.Label) {
 			observed = append(observed, item)
 		}
 	}
@@ -362,7 +360,7 @@ func AISummary(result model.Result) string {
 	support := len(result.EvidenceFor)
 	against := 0
 	for _, item := range result.EvidenceAgainst {
-		if !engineFallbackLabels[item.Label] {
+		if !scoring.IsEnginePlaceholder(item.Label) {
 			against++
 		}
 	}

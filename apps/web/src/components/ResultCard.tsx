@@ -23,22 +23,6 @@ import TypeIcon, { typeLabel } from './TypeIcon';
 import WarningSignals from './WarningSignals';
 import WhatChanged from './WhatChanged';
 
-// verdictMeta styles the High/Medium/Low verdict badge.
-const verdictMeta: Record<string, { label: string; color: string }> = {
-  High: {
-    label: 'HIGH TRUST',
-    color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  },
-  Medium: {
-    label: 'MEDIUM TRUST',
-    color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  },
-  Low: {
-    label: 'LOW TRUST',
-    color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  },
-};
-
 // LegacyResult renders the original single-card layout for results that were
 // saved to local history before the explainable analysis shipped.
 function LegacyResult({ result }: { result: VerifyResponse }) {
@@ -76,7 +60,6 @@ function LegacyResult({ result }: { result: VerifyResponse }) {
 function ResultCard({ result }: { result: VerifyResponse }) {
   const hasAnalysis = result.verdict !== undefined;
 
-  const verdict = result.verdict ? verdictMeta[result.verdict] : undefined;
   const evidenceCount = (result.evidenceFor?.length ?? 0) + (result.evidenceAgainst?.length ?? 0);
 
   return (
@@ -95,7 +78,7 @@ function ResultCard({ result }: { result: VerifyResponse }) {
       </div>
 
       <div className="mb-4 flex items-center justify-between">
-        <StatusBadge status={result.status} />
+        <StatusBadge status={result.status} verdict={result.verdict} />
         <div className="flex items-center gap-2">
           <TypeIcon type={result.type} />
           <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -122,13 +105,6 @@ function ResultCard({ result }: { result: VerifyResponse }) {
             <div className="flex flex-wrap items-center gap-4">
               <TrustScore score={result.trustScore} />
               <div className="min-w-0 flex-1">
-                {verdict && (
-                  <span
-                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${verdict.color}`}
-                  >
-                    {verdict.label}
-                  </span>
-                )}
                 <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
                   {result.summary}
                 </p>

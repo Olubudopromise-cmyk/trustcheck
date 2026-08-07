@@ -91,6 +91,54 @@ func TestVerifyResponse_IncludesLegacyAndAnalysisFields(t *testing.T) {
 	}
 }
 
+// TestVerify_StatusDerivedFromVerdict proves the response status is a pure
+// function of the verdict, so no response can show a warning badge next to a
+// high-trust verdict. It also proves engine placeholder messages never surface
+// in the legacy evidence array.
+func TestVerify_StatusDerivedFromVerdict(t *testing.T) {
+	router := NewRouter("")
+
+	body := bytes.NewBufferString(`{"input":"unknown gibberish xyzzy"}`)
+	req := httptest.NewRequest(http.MethodPost, "/verify", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Status     string `json:"status"`
+		Verdict    string `json:"verdict"`
+		Evidence   []struct {
+			Label string `json:"label"`
+		} `json:"evidence"`
+		EvidenceAgainst []struct {
+			Label string `json:"label"`
+		} `json:"evidenceAgainst"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	wantStatus := map[string]string{"High": "verified", "Medium": "warning", "Low": "invalid"}[resp.Verdict]
+	if resp.Status != wantStatus {
+		t.Errorf("status %q must be derived from verdict %q (want %q)", resp.Status, resp.Verdict, wantStatus)
+	}
+
+	for _, item := range resp.Evidence {
+		if item.Label == "No Suggestion" {
+			t.Error("engine placeholder must not appear in the legacy evidence array")
+		}
+	}
+	for _, item := range resp.EvidenceAgainst {
+		if item.Label == "No Suggestion" {
+			t.Error("engine placeholder must not appear in evidenceAgainst")
+		}
+	}
+}
+
 // TestVerify_InvalidInputStill400 proves validation behavior is unchanged.
 func TestVerify_InvalidInputStill400(t *testing.T) {
 	router := NewRouter("")

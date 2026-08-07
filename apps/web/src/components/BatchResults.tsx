@@ -271,7 +271,7 @@ export default function BatchResults({ status, progress, results }: BatchResults
                     </td>
                     <td className="px-4 py-3">
                       {item.success && item.result ? (
-                        <StatusBadge status={item.result.status} />
+                        <StatusBadge status={item.result.status} verdict={item.result.verdict} />
                       ) : (
                         <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800 dark:bg-red-900/30 dark:text-red-300">
                           <span aria-hidden="true">✗</span>

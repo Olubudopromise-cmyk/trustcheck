@@ -3,6 +3,7 @@ package analysis
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/pamierin/trustcheck/apps/api/internal/model"
 )
@@ -80,14 +81,73 @@ func TestBuildTimeline_ConflictsStep(t *testing.T) {
 	}
 }
 
-// TestBuildTimeline_EngineFallbackIsNotAConflict ensures generic engine
-// messages like "No Suggestion" are never presented as conflicting evidence.
-func TestBuildTimeline_EngineFallbackIsNotAConflict(t *testing.T) {
+// TestBuildTimeline_AllStepsAgree guarantees every timeline section that
+// reports evidence counts reads the same pre-classified slices, so the
+// Evidence Gathered, Conflicts Identified, and Final Assessment steps can
+// never contradict each other. This is the integrity contract of the shared
+// evidence classification.
+func TestBuildTimeline_AllStepsAgree(t *testing.T) {
 	result := minimalResult()
-	result.EvidenceAgainst = []model.EvidenceItem{{Label: "No Suggestion", Result: "warning", Points: 10}}
-	step := conflictsStep(result)
-	if step.Summary != "No conflicting evidence identified." {
-		t.Errorf("engine fallback should not be a conflict, got %q", step.Summary)
+	result.EvidenceFor = []model.EvidenceItem{
+		{Label: "DNS Resolves", Result: "pass", Points: 20},
+		{Label: "HTTPS Available", Result: "pass", Points: 20},
+	}
+	result.EvidenceAgainst = []model.EvidenceItem{
+		{Label: "Expired Certificate", Result: "fail", Points: -30},
+	}
+
+	evidence := evidenceStep(result, 0)
+	conflicts := conflictsStep(result)
+	final := finalAssessmentStep(result)
+
+	if !strings.Contains(evidence.Summary, "2 supporting, 1 contradicting") {
+		t.Errorf("evidence step summary = %q", evidence.Summary)
+	}
+	if !strings.Contains(conflicts.Summary, "1 conflicting") {
+		t.Errorf("conflicts step summary = %q", conflicts.Summary)
+	}
+	if !strings.Contains(strings.Join(final.Details, "\n"), "1 contradicting check(s)") {
+		t.Errorf("final assessment should report 1 contradicting check, got %v", final.Details)
+	}
+
+	// The AI Reasoning step derives its one-liner from the same counts.
+	summary := reasoningSummary(result)
+	for _, want := range []string{"2 supporting", "1 contradicting"} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("reasoning summary should mention %q, got %q", want, summary)
+		}
+	}
+}
+
+// TestReasoningSummary_DataDriven covers the evidence-count based summary, so
+// the reasoning step never contradicts the evidence sections above it.
+func TestReasoningSummary_DataDriven(t *testing.T) {
+	with := func(forCount, againstCount int) model.Result {
+		r := minimalResult()
+		for i := 0; i < forCount; i++ {
+			r.EvidenceFor = append(r.EvidenceFor, model.EvidenceItem{Label: "S", Result: "pass", Points: 10})
+		}
+		for i := 0; i < againstCount; i++ {
+			r.EvidenceAgainst = append(r.EvidenceAgainst, model.EvidenceItem{Label: "C", Result: "fail", Points: -10})
+		}
+		return r
+	}
+
+	cases := []struct {
+		name string
+		in   model.Result
+		want string
+	}{
+		{"no evidence", with(0, 0), "No scored evidence"},
+		{"leaning positive", with(2, 0), "leans positive"},
+		{"leaning negative", with(0, 2), "leans negative"},
+		{"balanced", with(1, 1), "mixed"},
+	}
+	for _, tc := range cases {
+		got := reasoningSummary(tc.in)
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("%s: summary %q should contain %q", tc.name, got, tc.want)
+		}
 	}
 }
 
@@ -135,6 +195,28 @@ func TestTruncate(t *testing.T) {
 	}
 	if got := truncate("a longer string", 6); !strings.HasSuffix(got, "…") {
 		t.Errorf("truncated string should end with ellipsis, got %q", got)
+	}
+}
+
+// TestTruncate_UTF8 ensures multibyte characters are never split mid-rune, so
+// no replacement characters or corrupted text can appear in the timeline.
+func TestTruncate_UTF8(t *testing.T) {
+	input := "🚀🚀🚀🚀 rocket launch"
+	got := truncate(input, 4)
+	if !strings.Contains(got, "🚀🚀🚀🚀") {
+		t.Errorf("expected 4 intact rockets, got %q", got)
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("truncated string is not valid UTF-8: %q", got)
+	}
+
+	long := "abcde"
+	cut := truncate(long, 3)
+	if cut != "abc…" {
+		t.Errorf("ascii truncation wrong: %q", cut)
+	}
+	if !utf8.ValidString(cut) {
+		t.Errorf("ascii truncation produced invalid UTF-8: %q", cut)
 	}
 }
 

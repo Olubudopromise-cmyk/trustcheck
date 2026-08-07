@@ -1,5 +1,25 @@
 'use client';
 
+import type { Verdict } from '../types';
+
+export const VERDICT_META: Record<string, { symbol: string; label: string; color: string }> = {
+  High: {
+    symbol: '\u2713',
+    label: 'HIGH TRUST',
+    color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  },
+  Medium: {
+    symbol: '\u26a0',
+    label: 'MEDIUM TRUST',
+    color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  },
+  Low: {
+    symbol: '\u2717',
+    label: 'LOW TRUST',
+    color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  },
+};
+
 const statusMeta: Record<string, { symbol: string; label: string; color: string }> = {
   verified: {
     symbol: '\u2713',
@@ -43,8 +63,9 @@ const statusMeta: Record<string, { symbol: string; label: string; color: string 
   },
 };
 
-export default function StatusBadge({ status }: { status: string }) {
-  const meta = statusMeta[status] ?? statusMeta.not_implemented;
+export default function StatusBadge({ status, verdict }: { status: string; verdict?: Verdict }) {
+  const meta =
+    (verdict && VERDICT_META[verdict]) ?? statusMeta[status] ?? statusMeta.not_implemented;
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${meta.color}`}

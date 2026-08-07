@@ -56,15 +56,21 @@ func New(modules ...Module) *Analyzer {
 func (a *Analyzer) Analyze(ctx context.Context, input string, inputType classifier.InputType, vr verifier.Result) model.Result {
 	claim := claims.Extract(input, inputType)
 	signals := warnings.Detect(input, inputType)
-	evidenceFor, evidenceAgainst := splitEvidence(vr.Evidence)
-	neutral := neutralCount(vr.Evidence)
 	verdict := VerdictFromScore(vr.TrustScore)
+
+	// The shared evidence classification is the single source of the
+	// supporting / contradicting / neutral buckets. Every timeline section and
+	// perspective consumes these slices, so counts can never disagree.
+	set := scoring.ClassifyEvidence(vr.Evidence)
+	evidenceFor := set.Supporting
+	evidenceAgainst := set.Contradicting
+	neutral := len(set.Neutral)
 
 	interpretations := interpretations.Generate(interpretations.Context{
 		Input:           input,
 		InputType:       inputType,
 		Claim:           claim,
-		Status:          vr.Status,
+		Status:          model.StatusFromVerdict(verdict),
 		Warnings:        signals,
 		EvidenceFor:     evidenceFor,
 		EvidenceAgainst: evidenceAgainst,
@@ -73,7 +79,7 @@ func (a *Analyzer) Analyze(ctx context.Context, input string, inputType classifi
 	result := model.Result{
 		Input:              input,
 		Type:               string(inputType),
-		Status:             vr.Status,
+		Status:             model.StatusFromVerdict(verdict),
 		TrustScore:         vr.TrustScore,
 		Summary:            vr.Summary,
 		Verdict:            verdict,
@@ -124,34 +130,6 @@ func toEntities(entities []claims.Entity) []model.Entity {
 		out = append(out, model.Entity{Name: e.Name, Kind: e.Kind})
 	}
 	return out
-}
-
-// splitEvidence buckets scored checks into supporting and contradicting
-// sections. A pass supports the claim; a fail or warning contradicts it; an
-// info check is neutral and is dropped from both (it carries no score weight).
-func splitEvidence(evidence []scoring.Evidence) (forItems, againstItems []model.EvidenceItem) {
-	for _, e := range evidence {
-		item := model.EvidenceItem{Label: e.Label, Result: e.Result, Points: e.Points}
-		switch e.Result {
-		case "pass":
-			forItems = append(forItems, item)
-		case "fail", "warning":
-			againstItems = append(againstItems, item)
-		}
-	}
-	return forItems, againstItems
-}
-
-// neutralCount counts informational evidence items (no score weight) so the
-// timeline can report neutral references accurately.
-func neutralCount(evidence []scoring.Evidence) int {
-	count := 0
-	for _, e := range evidence {
-		if e.Result == "info" {
-			count++
-		}
-	}
-	return count
 }
 
 // standardChecks lists, per input type, the checks that would normally

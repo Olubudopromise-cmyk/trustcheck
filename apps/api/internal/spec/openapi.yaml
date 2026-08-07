@@ -159,6 +159,7 @@ components:
           $ref: '#/components/schemas/InputType'
         status:
           $ref: '#/components/schemas/VerificationStatus'
+          description: Canonical status derived from the verdict (High -> verified, Medium -> warning, Low -> invalid) so status and verdict can never disagree.
         trustScore:
           type: integer
           minimum: 0

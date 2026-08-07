@@ -135,10 +135,10 @@ func NewRouter(prefix string) *gin.Engine {
 		c.JSON(http.StatusOK, verifyResponse{
 			Input:                 req.Input,
 			Type:                  string(detected),
-			Status:                vr.Status,
+			Status:                result.Status,
 			TrustScore:            vr.TrustScore,
 			Summary:               vr.Summary,
-			Evidence:              vr.Evidence,
+			Evidence:              scoring.FilterEnginePlaceholders(vr.Evidence),
 			Verdict:               result.Verdict,
 			KeyClaim:              result.KeyClaim,
 			Entities:              result.Entities,

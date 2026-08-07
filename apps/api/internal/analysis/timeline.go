@@ -13,6 +13,9 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"github.com/pamierin/trustcheck/apps/api/internal/model"
 )
 
@@ -74,7 +77,7 @@ func entityLines(entities []model.Entity) []string {
 	for _, kind := range order {
 		label := kindLabel[kind]
 		if label == "" {
-			label = strings.Title(kind)
+			label = cases.Title(language.Und).String(kind)
 		}
 		lines = append(lines, fmt.Sprintf("%s: %s", label, strings.Join(byKind[kind], ", ")))
 	}
@@ -105,22 +108,12 @@ func evidenceStep(result model.Result, neutral int) model.ReasoningStep {
 	}
 }
 
-// conflictExclusions lists check labels that are engine fallback messages
-// ("I could not suggest anything") rather than evidence about the claim, so
-// they are never presented as conflicting information. Real failed checks and
-// warnings still appear.
-var conflictExclusions = map[string]bool{
-	"No Suggestion": true,
-}
-
 // conflictsStep reports where evidence disagrees, or states that it does not.
+// The result's EvidenceAgainst is already filtered by the pipeline's shared
+// classification (engine fallback messages never reach this section), so every
+// contradicting item here is real evidence about the claim.
 func conflictsStep(result model.Result) model.ReasoningStep {
-	var conflicts []model.EvidenceItem
-	for _, e := range result.EvidenceAgainst {
-		if !conflictExclusions[e.Label] {
-			conflicts = append(conflicts, e)
-		}
-	}
+	conflicts := result.EvidenceAgainst
 
 	if len(conflicts) == 0 {
 		return model.ReasoningStep{
@@ -189,15 +182,31 @@ func reasoningStep(result model.Result) model.ReasoningStep {
 	}
 }
 
-// reasoningSummary condenses the assessment into one user-facing sentence.
+// reasoningSummary condenses the assessment into one user-facing sentence
+// derived from the evidence counts, so it can never contradict the sections
+// above it.
 func reasoningSummary(result model.Result) string {
-	switch result.Verdict {
-	case model.VerdictHigh:
-		return "The claim passed most checks with little contradicting evidence, so confidence is high."
-	case model.VerdictMedium:
-		return "Supporting and contradicting signals balance each other, so the assessment is mixed."
+	support := len(result.EvidenceFor)
+	against := len(result.EvidenceAgainst)
+
+	switch {
+	case support == 0 && against == 0:
+		return "No scored evidence could be gathered, so this assessment rests on the input itself."
+	case support > against:
+		return fmt.Sprintf(
+			"Supporting evidence outweighs contradicting evidence (%d supporting vs %d contradicting), so the assessment leans positive.",
+			support, against,
+		)
+	case against > support:
+		return fmt.Sprintf(
+			"Contradicting evidence outweighs supporting evidence (%d supporting vs %d contradicting), so the assessment leans negative.",
+			support, against,
+		)
 	default:
-		return "The claim failed checks and/or carried risk signals, so confidence is low."
+		return fmt.Sprintf(
+			"Supporting and contradicting evidence are evenly balanced (%d each), so the assessment is mixed.",
+			support,
+		)
 	}
 }
 
@@ -237,10 +246,15 @@ func finalAssessmentStep(result model.Result) model.ReasoningStep {
 	}
 }
 
-// truncate shortens a string to max runes, appending an ellipsis.
+// truncate shortens a string to max runes, appending an ellipsis. It operates
+// on runes (not bytes) so multibyte characters like emoji are never split.
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	if max < 0 {
 		return s
 	}
-	return s[:max] + "…"
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
 }
