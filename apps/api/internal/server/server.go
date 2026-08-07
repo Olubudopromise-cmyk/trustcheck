@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pamierin/trustcheck/apps/api/internal/analysis"
 	"github.com/pamierin/trustcheck/apps/api/internal/classifier"
 	"github.com/pamierin/trustcheck/apps/api/internal/docs"
 	"github.com/pamierin/trustcheck/apps/api/internal/logging"
+	"github.com/pamierin/trustcheck/apps/api/internal/model"
 	"github.com/pamierin/trustcheck/apps/api/internal/ratelimit"
 	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 	"github.com/pamierin/trustcheck/apps/api/internal/spec"
@@ -26,6 +28,10 @@ type verifyRequest struct {
 	Input string `json:"input"`
 }
 
+// verifyResponse is the /verify response body. The legacy fields
+// (input, type, status, trustScore, summary) are preserved verbatim; the
+// analysis model adds the explainable-AI sections without breaking clients
+// that only read the legacy fields.
 type verifyResponse struct {
 	Input      string             `json:"input"`
 	Type       string             `json:"type"`
@@ -33,6 +39,20 @@ type verifyResponse struct {
 	TrustScore int                `json:"trustScore"`
 	Summary    string             `json:"summary"`
 	Evidence   []scoring.Evidence `json:"evidence"`
+
+	Verdict            model.Verdict          `json:"verdict"`
+	KeyClaim           string                 `json:"keyClaim"`
+	Entities           []model.Entity         `json:"entities"`
+	Keywords           []string               `json:"keywords"`
+	EvidenceFor        []model.EvidenceItem   `json:"evidenceFor"`
+	EvidenceAgainst    []model.EvidenceItem   `json:"evidenceAgainst"`
+	MissingEvidence    []string               `json:"missingEvidence"`
+	UnknownInformation []string               `json:"unknownInformation"`
+	Interpretations    []model.Interpretation `json:"interpretations"`
+	WarningSignals     []model.WarningSignal  `json:"warningSignals"`
+	Confidence         int                    `json:"confidence"`
+	Reasoning          []string               `json:"reasoning"`
+	Recommendations    []model.Recommendation `json:"recommendations"`
 }
 
 // NewRouter builds the fully configured TrustCheck API router.
@@ -46,6 +66,10 @@ func NewRouter(prefix string) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
 	logger := logging.New()
+
+	// analyzer runs the explainable-AI pipeline. Future modules (live web
+	// search, fact-check integrations, ...) are registered here.
+	analyzer := analysis.New()
 
 	limiter := ratelimit.New(ratelimit.Options{
 		Rate:  1, // 60 requests per minute
@@ -87,21 +111,35 @@ func NewRouter(prefix string) *gin.Engine {
 		}
 
 		detected := classifier.Detect(req.Input)
-		res := verifier.Verify(detected, req.Input)
+		vr := verifier.Verify(detected, req.Input)
+		result := analyzer.Analyze(context.Background(), req.Input, detected, vr)
 
 		logging.AddRequestAttrs(c,
 			"inputType", string(detected),
-			"trustScore", res.TrustScore,
-			"verificationStatus", res.Status,
+			"trustScore", vr.TrustScore,
+			"verificationStatus", vr.Status,
 		)
 
 		c.JSON(http.StatusOK, verifyResponse{
-			Input:      req.Input,
-			Type:       string(detected),
-			Status:     res.Status,
-			TrustScore: res.TrustScore,
-			Summary:    res.Summary,
-			Evidence:   res.Evidence,
+			Input:              req.Input,
+			Type:               string(detected),
+			Status:             vr.Status,
+			TrustScore:         vr.TrustScore,
+			Summary:            vr.Summary,
+			Evidence:           vr.Evidence,
+			Verdict:            result.Verdict,
+			KeyClaim:           result.KeyClaim,
+			Entities:           result.Entities,
+			Keywords:           result.Keywords,
+			EvidenceFor:        result.EvidenceFor,
+			EvidenceAgainst:    result.EvidenceAgainst,
+			MissingEvidence:    result.MissingEvidence,
+			UnknownInformation: result.UnknownInformation,
+			Interpretations:    result.Interpretations,
+			WarningSignals:     result.WarningSignals,
+			Confidence:         result.Confidence,
+			Reasoning:          result.Reasoning,
+			Recommendations:    result.Recommendations,
 		})
 	})
 

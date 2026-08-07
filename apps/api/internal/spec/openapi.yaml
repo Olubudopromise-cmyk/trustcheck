@@ -32,9 +32,12 @@ paths:
       operationId: verifyInput
       summary: Verify a single input
       description: >
-        Classifies the input and returns the detected type, a trust score from
-        0 to 100, a verification status, a human-readable summary, and the
-        ordered evidence used to compute the score.
+        Classifies the input and returns an explainable analysis: the detected
+        type, a trust score from 0 to 100, a High/Medium/Low verdict, the
+        extracted main claim with its entities and keywords, evidence split into
+        supporting and contradicting sections, alternative interpretations,
+        misinformation warning signals, an explanation of the score, and
+        recommended next steps.
       requestBody:
         required: true
         content:
@@ -142,6 +145,9 @@ components:
         - trustScore
         - summary
         - evidence
+        - verdict
+        - keyClaim
+        - confidence
       properties:
         input:
           type: string
@@ -160,9 +166,167 @@ components:
           description: Human-readable summary of the verification result.
         evidence:
           type: array
-          description: Ordered list of evidence items that contributed to the score.
+          description: Ordered list of evidence items that contributed to the score (legacy field).
           items:
             $ref: '#/components/schemas/Evidence'
+        verdict:
+          $ref: '#/components/schemas/Verdict'
+        keyClaim:
+          type: string
+          description: The single claim under review, extracted from the input before scoring.
+        entities:
+          type: array
+          description: Named things (organizations, people, locations, dates) mentioned in the input.
+          items:
+            $ref: '#/components/schemas/Entity'
+        keywords:
+          type: array
+          items:
+            type: string
+          description: Important keywords extracted from the input.
+        evidenceFor:
+          type: array
+          description: Scored checks that support the claim.
+          items:
+            $ref: '#/components/schemas/EvidenceItem'
+        evidenceAgainst:
+          type: array
+          description: Scored checks that contradict or caution against the claim.
+          items:
+            $ref: '#/components/schemas/EvidenceItem'
+        missingEvidence:
+          type: array
+          items:
+            type: string
+          description: Checks that could not be performed. Never fabricated.
+        unknownInformation:
+          type: array
+          items:
+            type: string
+          description: Facts that are genuinely unknown (author, provenance, ownership, ...).
+        interpretations:
+          type: array
+          description: Two to three plausible readings of the input.
+          items:
+            $ref: '#/components/schemas/Interpretation'
+        warningSignals:
+          type: array
+          description: Structured misinformation indicators detected in the input.
+          items:
+            $ref: '#/components/schemas/WarningSignal'
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: How confident the analysis is in its own assessment (not the trust score).
+        reasoning:
+          type: array
+          items:
+            type: string
+          description: Bullet explanation of why the trust score is what it is. "+" bullets support, "-" bullets contradict.
+        recommendations:
+          type: array
+          description: Actionable next steps for the user.
+          items:
+            $ref: '#/components/schemas/Recommendation'
+    Verdict:
+      type: string
+      description: Coarse human-facing trust band derived from the trust score.
+      enum:
+        - High
+        - Medium
+        - Low
+    Entity:
+      type: object
+      required:
+        - name
+        - kind
+      properties:
+        name:
+          type: string
+          description: The entity as written in the input.
+        kind:
+          type: string
+          enum:
+            - organization
+            - location
+            - person
+            - date
+      example:
+        name: NASA
+        kind: organization
+    EvidenceItem:
+      type: object
+      required:
+        - label
+        - result
+        - points
+      properties:
+        label:
+          type: string
+          description: Short name of the check performed.
+        result:
+          $ref: '#/components/schemas/EvidenceResult'
+        points:
+          type: integer
+          description: Points the check contributed to the final trust score.
+        note:
+          type: string
+          description: Optional plain-English explanation of the check.
+    Interpretation:
+      type: object
+      required:
+        - title
+        - explanation
+        - confidence
+        - reasoning
+      properties:
+        title:
+          type: string
+          description: Short name of the interpretation, e.g. "Literal reading".
+        explanation:
+          type: string
+          description: Plain-English description of this reading.
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: How plausible this interpretation is (0-100).
+        reasoning:
+          type: string
+          description: Why this interpretation is plausible.
+    WarningSignal:
+      type: object
+      required:
+        - label
+        - severity
+        - description
+      properties:
+        label:
+          type: string
+          description: Name of the signal, e.g. "No citations or sources".
+        severity:
+          type: string
+          enum:
+            - high
+            - medium
+            - low
+          description: How serious the signal is.
+        description:
+          type: string
+          description: Plain-English explanation of the signal.
+    Recommendation:
+      type: object
+      required:
+        - title
+        - description
+      properties:
+        title:
+          type: string
+          description: Short action, e.g. "Check WHOIS registration".
+        description:
+          type: string
+          description: Why and how to perform the action.
     Evidence:
       type: object
       required:
