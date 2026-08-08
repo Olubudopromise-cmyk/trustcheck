@@ -10,8 +10,10 @@ import (
 	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
 )
 
-// probeTimeout is the per-attempt timeout for the HTTPS / HTTP checks.
-const probeTimeout = 5 * time.Second
+// probeTimeout is the per-attempt timeout for the HTTPS / HTTP checks. It is
+// deliberately modest so a slow endpoint can never push a single verification
+// past the serverless function deadline (Netlify's synchronous default is 10s).
+const probeTimeout = 3 * time.Second
 
 // statusBand scores the HTTP response status code per the spec:
 // 200-399 -> +20, 400-499 -> +10, 500+ (and anything else) -> +0.

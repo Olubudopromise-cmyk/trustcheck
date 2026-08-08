@@ -16,7 +16,8 @@ export default function GlobalError({ reset }: GlobalErrorProps) {
         Something went wrong
       </h1>
       <p className="max-w-md text-slate-500 dark:text-slate-400">
-        An unexpected error occurred. Try again, or head back to the homepage.
+        An unexpected error occurred while rendering this page. Your saved research has not been
+        deleted. Try again, or head back to the homepage.
       </p>
       <div className="mt-4 flex flex-wrap justify-center gap-3">
         <button

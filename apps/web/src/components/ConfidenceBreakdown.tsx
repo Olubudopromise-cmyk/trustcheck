@@ -11,7 +11,8 @@ const metricColor = (value: number): string =>
 // confidence. Only user-friendly metrics are exposed — never the hidden scoring
 // algorithm.
 function ConfidenceBreakdown({ breakdown }: { breakdown?: ConfidenceBreakdownType }) {
-  if (!breakdown || breakdown.metrics.length === 0) {
+  const metrics = breakdown?.metrics ?? [];
+  if (metrics.length === 0) {
     return null;
   }
 
@@ -19,12 +20,12 @@ function ConfidenceBreakdown({ breakdown }: { breakdown?: ConfidenceBreakdownTyp
     <section aria-label="Confidence breakdown">
       <div className="mb-4 flex items-center gap-3">
         <span className="text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
-          {breakdown.overall}%
+          {breakdown?.overall ?? 0}%
         </span>
         <span className="text-sm text-slate-500 dark:text-slate-400">Overall confidence</span>
       </div>
       <ul role="list" className="space-y-3">
-        {breakdown.metrics.map((metric) => (
+        {metrics.map((metric) => (
           <li key={metric.name}>
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">

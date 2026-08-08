@@ -85,10 +85,11 @@ export function downloadBatchJSON(results: VerifyResponse[]): void {
 // renderReportHTML builds a self-contained, printable report styled with the
 // project's palette (slate text, cyan brand, green/yellow/red/blue evidence).
 export function renderReportHTML(result: VerifyResponse): string {
+  const evidence = result.evidence ?? [];
   const evidenceItems =
-    result.evidence.length === 0
+    evidence.length === 0
       ? '<li style="color:#64748b">No verification details available.</li>'
-      : result.evidence
+      : evidence
           .map((item) => {
             const icon = EVIDENCE_ICONS[item.result] ?? EVIDENCE_ICONS.info;
             const color = EVIDENCE_COLORS[item.result] ?? EVIDENCE_COLORS.info;
@@ -120,8 +121,8 @@ export function renderReportHTML(result: VerifyResponse): string {
       .map(
         (step) =>
           `<li><strong>${escapeHtml(step.title)}</strong> — ${escapeHtml(step.summary)}${
-            step.details.length
-              ? `<ul>\n${step.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('\n')}\n</ul>`
+            (step.details ?? []).length
+              ? `<ul>\n${(step.details ?? []).map((d) => `<li>${escapeHtml(d)}</li>`).join('\n')}\n</ul>`
               : ''
           }</li>`,
       )
@@ -134,7 +135,7 @@ export function renderReportHTML(result: VerifyResponse): string {
   }
 
   if (result.confidenceBreakdown) {
-    const metricItems = result.confidenceBreakdown.metrics
+    const metricItems = (result.confidenceBreakdown.metrics ?? [])
       .map(
         (m) =>
           `<li><strong>${escapeHtml(m.name)}</strong> ${m.score}% — ${escapeHtml(m.note)}</li>`,

@@ -234,12 +234,15 @@ func formatEvidenceNote(r SearchResult, supports bool) string {
 	return note
 }
 
-// truncate truncates a string to a maximum length.
+// truncate truncates a string to a maximum length without splitting a
+// multi-byte rune, so UTF-8 content (accents, emoji, non-Latin scripts) is
+// always preserved correctly.
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // convertSourceType converts our SourceType to the model SourceType.

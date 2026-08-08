@@ -10,6 +10,8 @@ package main
 
 import (
 	"context"
+	"log"
+	"net/http"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -31,8 +33,24 @@ func init() {
 }
 
 // handler translates the Netlify/Lambda proxy event into an HTTP request and
-// runs it through the router.
-func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+// runs it through the router. Any panic is recovered here so a single bad
+// request can never take the whole function down or surface as a platform
+// 502: the panic is written to the function logs (where it can actually be
+// diagnosed) and a clean 500 JSON response is returned instead.
+func handler(ctx context.Context, req events.APIGatewayProxyRequest) (resp events.APIGatewayProxyResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[panic] recovered in handler for %s %s: %v", req.HTTPMethod, req.Path, r)
+			resp = events.APIGatewayProxyResponse{
+				StatusCode: http.StatusInternalServerError,
+				Headers: map[string]string{
+					"Content-Type": "application/json",
+				},
+				Body: `{"error":"internal error"}`,
+			}
+		}
+	}()
+
 	req.Path = normalizePath(req.Path)
 	return ginLambda.ProxyWithContext(ctx, req)
 }

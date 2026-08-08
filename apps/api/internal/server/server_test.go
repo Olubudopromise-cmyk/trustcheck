@@ -152,3 +152,150 @@ func TestVerify_InvalidInputStill400(t *testing.T) {
 		t.Fatalf("expected 400 for empty body, got %d", w.Code)
 	}
 }
+
+// TestVerify_TextClaimWebEvidence proves text claims are processed with explainable analysis.
+func TestVerify_TextClaimWebEvidence(t *testing.T) {
+	router := NewRouter("")
+
+	body := bytes.NewBufferString(`{"input":"The Earth revolves around the Sun", "mode":"quick"}`)
+	req := httptest.NewRequest(http.MethodPost, "/verify", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	if resp["type"] != "unknown" {
+		t.Errorf("expected type 'unknown' for text claim, got %v", resp["type"])
+	}
+	if resp["verdict"] == "" {
+		t.Error("expected non-empty verdict for text claim")
+	}
+}
+
+// TestVerify_DomainVerification proves domain verification runs successfully.
+func TestVerify_DomainVerification(t *testing.T) {
+	router := NewRouter("")
+
+	body := bytes.NewBufferString(`{"input":"google.com", "mode":"quick"}`)
+	req := httptest.NewRequest(http.MethodPost, "/verify", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	if resp["type"] != "domain" {
+		t.Errorf("expected type 'domain', got %v", resp["type"])
+	}
+}
+
+// TestVerify_GovernmentMode proves government mode verification sets the analysis mode correctly.
+func TestVerify_GovernmentMode(t *testing.T) {
+	router := NewRouter("")
+
+	body := bytes.NewBufferString(`{"input":"cdc.gov", "mode":"government"}`)
+	req := httptest.NewRequest(http.MethodPost, "/verify", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	if resp["analysisMode"] != "government_official" {
+		t.Errorf("expected analysisMode 'government_official', got %v", resp["analysisMode"])
+	}
+}
+
+// TestVerify_MalformedJSON_400 proves malformed request bodies produce a 400,
+// never a 500/502.
+func TestVerify_MalformedJSON_400(t *testing.T) {
+	router := NewRouter("")
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(`{not json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed JSON, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestVerify_EmptyInput_400 proves an explicit empty input string is rejected
+// with a 4xx rather than being processed or crashing.
+func TestVerify_EmptyInput_400(t *testing.T) {
+	router := NewRouter("")
+
+	body := bytes.NewBufferString(`{"input":""}`)
+	req := httptest.NewRequest(http.MethodPost, "/verify", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty input, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestVerify_UnknownModeDefaultsToQuick proves an unrecognized mode alias is
+// normalized to quick instead of erroring or panicking on an unknown enum.
+func TestVerify_UnknownModeDefaultsToQuick(t *testing.T) {
+	router := NewRouter("")
+
+	body := bytes.NewBufferString(`{"input":"8.8.8.8", "mode":"not-a-real-mode"}`)
+	req := httptest.NewRequest(http.MethodPost, "/verify", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	if resp["analysisMode"] != "quick" {
+		t.Errorf("expected analysisMode 'quick', got %v", resp["analysisMode"])
+	}
+}
+
+// TestHealth proves GET /health returns the ok payload.
+func TestHealth(t *testing.T) {
+	router := NewRouter("")
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"status":"ok"`)) {
+		t.Errorf("expected ok status in body, got %s", w.Body.String())
+	}
+}

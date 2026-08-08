@@ -17,11 +17,14 @@ type WikipediaProvider struct {
 	client *http.Client
 }
 
-// NewWikipediaProvider creates a new Wikipedia search provider.
+// NewWikipediaProvider creates a new Wikipedia search provider. The HTTP
+// client timeout is kept well below the serverless function deadline so a
+// slow or blocked Wikipedia API can never push the whole verification past
+// the platform limit; the request context provides the final bound.
 func NewWikipediaProvider() *WikipediaProvider {
 	return &WikipediaProvider{
 		client: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: 3 * time.Second,
 		},
 	}
 }
@@ -64,21 +67,32 @@ func (p *WikipediaProvider) Search(ctx context.Context, query string, maxResults
 		maxResults = 10
 	}
 
-	// Step 1: Search for relevant pages with retry
+	// Step 1: Search for relevant pages with one retry. The backoff between
+	// attempts is context-aware so an expired request deadline aborts the
+	// retry immediately instead of sleeping past it.
 	var searchResults []struct {
 		Title   string
 		PageID  int
 		Snippet string
 	}
 	var err error
-	
+
 	for attempt := 0; attempt < 2; attempt++ {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		searchResults, err = p.searchPages(ctx, query, maxResults)
 		if err == nil {
 			break
 		}
 		if attempt < 1 {
-			time.Sleep(1 * time.Second) // Wait before retry
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(500 * time.Millisecond):
+			}
 		}
 	}
 	if err != nil {
@@ -98,10 +112,12 @@ func (p *WikipediaProvider) Search(ctx context.Context, query string, maxResults
 			summary = sr.Snippet
 		}
 
-		// Clean up HTML from summary
+		// Clean up HTML from summary, truncating on rune boundaries so
+		// multi-byte characters are never split (UTF-8 safety).
 		summary = stripHTML(summary)
-		if len(summary) > 500 {
-			summary = summary[:500] + "..."
+		runes := []rune(summary)
+		if len(runes) > 500 {
+			summary = string(runes[:500]) + "..."
 		}
 
 		domain := "wikipedia.org"

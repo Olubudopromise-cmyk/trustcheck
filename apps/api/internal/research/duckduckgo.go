@@ -19,11 +19,14 @@ type DuckDuckGoProvider struct {
 	client *http.Client
 }
 
-// NewDuckDuckGoProvider creates a new DuckDuckGo search provider.
+// NewDuckDuckGoProvider creates a new DuckDuckGo search provider. The HTTP
+// client timeout is kept well below the serverless function deadline so a
+// slow or CAPTCHA-blocked DuckDuckGo can never push the whole verification
+// past the platform limit; the request context provides the final bound.
 func NewDuckDuckGoProvider() *DuckDuckGoProvider {
 	return &DuckDuckGoProvider{
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 3 * time.Second,
 		},
 	}
 }

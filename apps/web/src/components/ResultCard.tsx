@@ -3,7 +3,6 @@
 import { memo } from 'react';
 import type { VerifyResponse } from '../types';
 import AISummary from './AISummary';
-import ClaimCard from './ClaimCard';
 import ClaimsList from './ClaimsList';
 import CollapsibleSection from './CollapsibleSection';
 import EvidenceLedger from './EvidenceLedger';

@@ -9,6 +9,7 @@ import WorkspaceComposer from '../components/WorkspaceComposer';
 import { useVerificationHistory } from '../hooks/useVerificationHistory';
 import type { AnalysisMode, VerificationHistoryItem, VerifyResponse } from '../types';
 import { verify } from '../utils/api';
+import { normalizeAnalysisMode, normalizeVerifyResponse } from '../utils/history';
 
 export default function HomePage() {
   const [input, setInput] = useState('');
@@ -19,7 +20,7 @@ export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewResearch, setIsNewResearch] = useState(true);
   const [mode, setMode] = useState<AnalysisMode>('quick');
-  const { history, remember, remove, clear } = useVerificationHistory();
+  const { history, remember, remove } = useVerificationHistory();
 
   const handleSubmit = useCallback(async () => {
     setResult(null);
@@ -33,8 +34,12 @@ export default function HomePage() {
     setLoading(true);
     try {
       const data = await verify(trimmed, mode);
-      setResult(data);
-      const item = remember(trimmed, data);
+      // Normalize the fresh API response (Go emits `null` for empty slices)
+      // so every render path — fresh results and persisted history — sees the
+      // same safe shape.
+      const normalized = normalizeVerifyResponse(data);
+      setResult(normalized);
+      const item = remember(trimmed, normalized);
       setActiveId(item?.id ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Is the backend running?');
@@ -45,7 +50,15 @@ export default function HomePage() {
 
   const handleReopen = useCallback((item: VerificationHistoryItem) => {
     setInput(item.input);
-    setResult(item.result);
+    // Normalize defensively: history entries saved before newer result fields
+    // existed must render and continue without crashing, and the stored mode
+    // (if any) is restored so "Continue Research" re-runs the same kind of
+    // analysis.
+    setResult(normalizeVerifyResponse(item.result));
+    const storedMode = normalizeAnalysisMode(item.result.analysisMode);
+    if (storedMode) {
+      setMode(storedMode);
+    }
     setActiveId(item.id);
     setError(null);
     setIsNewResearch(false);

@@ -82,7 +82,7 @@ function ReasoningTimeline({ steps }: { steps?: ReasoningStep[] }) {
                     role="list"
                     className="mt-2 space-y-1.5 border-l border-slate-200 pl-5 dark:border-slate-700"
                   >
-                    {step.details.map((detail, detailIndex) => (
+                    {(step.details ?? []).map((detail, detailIndex) => (
                       <li
                         key={detailIndex}
                         className="text-sm leading-relaxed text-slate-700 dark:text-slate-300"

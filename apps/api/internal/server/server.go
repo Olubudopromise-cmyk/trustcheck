@@ -161,17 +161,23 @@ func NewRouter(prefix string) *gin.Engine {
 			return
 		}
 
-		// Determine analysis mode from request, defaulting to quick.
-		mode := req.Mode
-		if mode == "" {
-			mode = model.ModeQuick
-		}
+		// Determine analysis mode from request, normalizing aliases.
+		mode := normalizeMode(req.Mode)
 		settings := model.DefaultSettings(mode)
 		analyzer := baseAnalyzer.WithSettings(settings)
 
+		// Bound the analysis phase (including live web research) so the whole
+		// request always completes well inside the serverless function
+		// deadline (Netlify's synchronous default is 10s). When the deadline
+		// fires, the research module degrades honestly (partial evidence +
+		// warning signal) instead of the platform killing the request with a
+		// 502.
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Second)
+		defer cancel()
+
 		detected := classifier.Detect(req.Input)
 		vr := verifier.Verify(detected, req.Input)
-		result := analyzer.Analyze(context.Background(), req.Input, detected, vr)
+		result := analyzer.Analyze(ctx, req.Input, detected, vr)
 
 		logging.AddRequestAttrs(c,
 			"inputType", string(detected),
@@ -304,6 +310,20 @@ func NewRouter(prefix string) *gin.Engine {
 	})
 
 	return r
+}
+
+// normalizeMode maps mode aliases to canonical model.AnalysisMode values.
+func normalizeMode(mode model.AnalysisMode) model.AnalysisMode {
+	switch strings.ToLower(string(mode)) {
+	case "government", "government_official":
+		return model.ModeGovernmentOfficial
+	case "deep", "deep_research":
+		return model.ModeDeepResearch
+	case "security", "security_review":
+		return model.ModeSecurityReview
+	default:
+		return model.ModeQuick
+	}
 }
 
 // detectLanguage detects the programming language from the filename extension.

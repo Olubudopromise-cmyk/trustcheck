@@ -86,6 +86,14 @@ function LedgerEntryCard({
 }
 
 function EvidenceLedger({ ledger }: EvidenceLedgerProps) {
+  // Safe defaults for every field: persisted ledgers from older app versions
+  // may be missing counters or buckets, and rendering must never crash.
+  const supporting = ledger.supporting ?? [];
+  const contradicting = ledger.contradicting ?? [];
+  const unknown = ledger.unknown ?? [];
+  const totalSources = ledger.totalSources ?? supporting.length + contradicting.length;
+  const independentCount = ledger.independentCount ?? 0;
+
   return (
     <section aria-label="Evidence Ledger" className="space-y-4">
       <div className="flex items-center justify-between">
@@ -93,15 +101,15 @@ function EvidenceLedger({ ledger }: EvidenceLedgerProps) {
           Evidence Ledger
         </h3>
         <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <span>{ledger.totalSources} sources</span>
-          <span>{ledger.independentCount} independent</span>
+          <span>{totalSources} sources</span>
+          <span>{independentCount} independent</span>
         </div>
       </div>
 
       {/* Claim */}
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
         <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-          &ldquo;{ledger.claim}&rdquo;
+          &ldquo;{ledger.claim ?? ''}&rdquo;
         </p>
       </div>
 
@@ -109,15 +117,15 @@ function EvidenceLedger({ ledger }: EvidenceLedgerProps) {
       <div>
         <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">
           <span className="h-2 w-2 rounded-full bg-green-500" />
-          Supporting ({ledger.supporting.length})
+          Supporting ({supporting.length})
         </h4>
-        {ledger.supporting.length === 0 ? (
+        {supporting.length === 0 ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">
             No supporting evidence found.
           </p>
         ) : (
           <div className="space-y-2">
-            {ledger.supporting.map((entry, i) => (
+            {supporting.map((entry, i) => (
               <LedgerEntryCard key={`s-${i}`} entry={entry} type="supporting" />
             ))}
           </div>
@@ -128,15 +136,15 @@ function EvidenceLedger({ ledger }: EvidenceLedgerProps) {
       <div>
         <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400">
           <span className="h-2 w-2 rounded-full bg-red-500" />
-          Contradicting ({ledger.contradicting.length})
+          Contradicting ({contradicting.length})
         </h4>
-        {ledger.contradicting.length === 0 ? (
+        {contradicting.length === 0 ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">
             No contradicting evidence found.
           </p>
         ) : (
           <div className="space-y-2">
-            {ledger.contradicting.map((entry, i) => (
+            {contradicting.map((entry, i) => (
               <LedgerEntryCard key={`c-${i}`} entry={entry} type="contradicting" />
             ))}
           </div>
@@ -144,14 +152,14 @@ function EvidenceLedger({ ledger }: EvidenceLedgerProps) {
       </div>
 
       {/* Unknown */}
-      {ledger.unknown.length > 0 && (
+      {unknown.length > 0 && (
         <div>
           <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             <span className="h-2 w-2 rounded-full bg-slate-400" />
             Unknown
           </h4>
           <ul className="space-y-1">
-            {ledger.unknown.map((item, i) => (
+            {unknown.map((item, i) => (
               <li key={i} className="text-xs text-slate-500 dark:text-slate-400">
                 {item}
               </li>

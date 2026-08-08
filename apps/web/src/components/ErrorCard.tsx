@@ -7,8 +7,12 @@ export default function ErrorCard({ message }: { message: string }) {
       role="alert"
       aria-live="assertive"
     >
-      <p className="font-medium">Something went wrong</p>
+      <p className="font-medium">Verification could not be completed</p>
       <p className="mt-1">{message}</p>
+      <p className="mt-2 text-xs text-red-700/80 dark:text-red-300/80">
+        Your saved research has not been deleted. You can try again or reopen a previous session
+        from the sidebar.
+      </p>
     </div>
   );
 }

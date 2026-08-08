@@ -23,6 +23,34 @@ export class ApiRequestError extends Error {
   }
 }
 
+// userFacingMessage turns HTTP failures into clear, non-alarming copy. The
+// user's saved research lives in localStorage and is never touched by an API
+// failure, so the message says so explicitly instead of implying data loss.
+function userFacingMessage(status: number, bodyError?: string): string {
+  if (bodyError && status < 500) {
+    return bodyError;
+  }
+  if (status === 429) {
+    return 'Too many requests. Please wait a moment and try again.';
+  }
+  if (status === 502 || status === 504 || status >= 500) {
+    return 'Verification could not be completed. The verification service returned an error. Your saved research has not been deleted. Try again.';
+  }
+  return bodyError ?? `Verification failed (HTTP ${status}).`;
+}
+
+// parseApiBody safely reads a JSON body. If the response is not JSON at all
+// (e.g. the platform returned HTML for a missing route), null is returned so
+// the caller can fall back to a friendly message instead of crashing on a
+// syntax error.
+async function parseApiBody(res: Response): Promise<ApiError | VerifyResponse | null> {
+  try {
+    return (await res.json()) as ApiError | VerifyResponse;
+  } catch {
+    return null;
+  }
+}
+
 // verify submits a single input to the TrustCheck API and returns the typed
 // verification result. Network failures are surfaced as a clear, actionable
 // message instead of a raw fetch error.
@@ -39,12 +67,17 @@ export async function verify(input: string, mode: AnalysisMode = 'quick'): Promi
   }
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as ApiError | null;
+    const body = await parseApiBody(res);
+    const bodyError = body && typeof body === 'object' && 'error' in body ? body.error : undefined;
+    throw new ApiRequestError(userFacingMessage(res.status, bodyError), res.status);
+  }
+
+  const body = await parseApiBody(res);
+  if (body === null) {
     throw new ApiRequestError(
-      body?.error ?? `Verification failed (HTTP ${res.status}).`,
+      'Verification could not be completed. The service returned an unreadable response. Your saved research has not been deleted. Try again.',
       res.status,
     );
   }
-
-  return (await res.json()) as VerifyResponse;
+  return body as VerifyResponse;
 }

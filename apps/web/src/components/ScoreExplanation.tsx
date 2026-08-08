@@ -36,6 +36,14 @@ function ScoreBar({
 }
 
 function ScoreExplanation({ explanation }: ScoreExplanationProps) {
+  // Safe defaults for persisted explanations that predate the field (old
+  // saved results render with zeros instead of undefined percentages).
+  const evidenceStrength = explanation.evidenceStrength ?? 0;
+  const sourceQuality = explanation.sourceQuality ?? 0;
+  const independentConfirmation = explanation.independentConfirmation ?? 0;
+  const contradictionRisk = explanation.contradictionRisk ?? 0;
+  const missingEvidence = explanation.missingEvidence ?? 0;
+
   return (
     <section aria-label="Score Explanation" className="space-y-4">
       <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Why This Result?</h3>
@@ -43,12 +51,12 @@ function ScoreExplanation({ explanation }: ScoreExplanationProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <ScoreBar
           label="Evidence Strength"
-          value={explanation.evidenceStrength}
-          note={explanation.evidenceStrengthNote}
+          value={evidenceStrength}
+          note={explanation.evidenceStrengthNote ?? ''}
           color={
-            explanation.evidenceStrength >= 70
+            evidenceStrength >= 70
               ? 'bg-green-500'
-              : explanation.evidenceStrength >= 40
+              : evidenceStrength >= 40
                 ? 'bg-yellow-500'
                 : 'bg-red-500'
           }
@@ -56,12 +64,12 @@ function ScoreExplanation({ explanation }: ScoreExplanationProps) {
 
         <ScoreBar
           label="Source Quality"
-          value={explanation.sourceQuality}
-          note={explanation.sourceQualityNote}
+          value={sourceQuality}
+          note={explanation.sourceQualityNote ?? ''}
           color={
-            explanation.sourceQuality >= 70
+            sourceQuality >= 70
               ? 'bg-green-500'
-              : explanation.sourceQuality >= 40
+              : sourceQuality >= 40
                 ? 'bg-yellow-500'
                 : 'bg-red-500'
           }
@@ -69,12 +77,12 @@ function ScoreExplanation({ explanation }: ScoreExplanationProps) {
 
         <ScoreBar
           label="Independent Confirmation"
-          value={explanation.independentConfirmation}
-          note={explanation.independentNote}
+          value={independentConfirmation}
+          note={explanation.independentNote ?? ''}
           color={
-            explanation.independentConfirmation >= 70
+            independentConfirmation >= 70
               ? 'bg-green-500'
-              : explanation.independentConfirmation >= 40
+              : independentConfirmation >= 40
                 ? 'bg-yellow-500'
                 : 'bg-red-500'
           }
@@ -82,12 +90,12 @@ function ScoreExplanation({ explanation }: ScoreExplanationProps) {
 
         <ScoreBar
           label="Contradiction Risk"
-          value={explanation.contradictionRisk}
-          note={explanation.contradictionNote}
+          value={contradictionRisk}
+          note={explanation.contradictionNote ?? ''}
           color={
-            explanation.contradictionRisk <= 30
+            contradictionRisk <= 30
               ? 'bg-green-500'
-              : explanation.contradictionRisk <= 60
+              : contradictionRisk <= 60
                 ? 'bg-yellow-500'
                 : 'bg-red-500'
           }
@@ -95,12 +103,12 @@ function ScoreExplanation({ explanation }: ScoreExplanationProps) {
 
         <ScoreBar
           label="Missing Evidence"
-          value={explanation.missingEvidence}
-          note={explanation.missingNote}
+          value={missingEvidence}
+          note={explanation.missingNote ?? ''}
           color={
-            explanation.missingEvidence <= 30
+            missingEvidence <= 30
               ? 'bg-green-500'
-              : explanation.missingEvidence <= 60
+              : missingEvidence <= 60
                 ? 'bg-yellow-500'
                 : 'bg-red-500'
           }

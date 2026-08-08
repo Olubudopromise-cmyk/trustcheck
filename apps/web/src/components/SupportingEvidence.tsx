@@ -23,43 +23,45 @@ function SupportingEvidence({ groups }: { groups?: SourceGroup[] }) {
 
   return (
     <section aria-label="Supporting evidence by source" className="space-y-4">
-      {groups.map((group) => (
-        <div key={group.category}>
-          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {group.category}
-          </h4>
-          <ul role="list" className="mt-2 space-y-2">
-            {group.items.map((item) => (
-              <li
-                key={`${group.category}-${item.title}`}
-                className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
-                      {item.title}
-                    </span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">
-                      {item.source}
+      {groups.map((group, groupIndex) => {
+        const category = group.category ?? 'Other';
+        const items = group.items ?? [];
+        return (
+          <div key={`${category}-${groupIndex}`}>
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{category}</h4>
+            <ul role="list" className="mt-2 space-y-2">
+              {items.map((item) => (
+                <li
+                  key={`${group.category}-${item.title}`}
+                  className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {item.title}
+                      </span>
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">
+                        {item.source}
+                      </span>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${credibilityColor[item.credibility] ?? credibilityColor.medium}`}
+                    >
+                      {item.credibility}
                     </span>
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${credibilityColor[item.credibility] ?? credibilityColor.medium}`}
-                  >
-                    {item.credibility}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{item.summary}</p>
-                {item.publicationDate && (
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Published: {item.publicationDate}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+                  <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{item.summary}</p>
+                  {item.publicationDate && (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Published: {item.publicationDate}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
     </section>
   );
 }

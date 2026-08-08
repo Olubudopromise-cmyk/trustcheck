@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 )
 
 // MockSearchProvider is a mock implementation of SearchProvider for testing.
@@ -291,6 +292,40 @@ func TestResearchEngine_EvidenceClassification(t *testing.T) {
 
 	if len(evidence.Neutral) != 1 {
 		t.Errorf("expected 1 neutral evidence, got %d", len(evidence.Neutral))
+	}
+}
+
+// blockingProvider models a provider whose HTTP call hangs until the context
+// fires, as happens when DuckDuckGo/Wikipedia are slow or blocked. The engine
+// must return promptly (marked partial/failed) rather than serializing
+// per-provider timeouts and blowing the serverless function deadline.
+type hangingProvider struct{}
+
+func (hangingProvider) Name() string            { return "hanging" }
+func (hangingProvider) SupportsMode(mode string) bool { return true }
+func (hangingProvider) Search(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestResearchEngine_HangingProviderRespectsDeadline(t *testing.T) {
+	engine := NewResearchEngine(hangingProvider{}, DefaultSearchConfig())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	evidence := engine.Research(ctx, "Some claim", []string{"claim"})
+	elapsed := time.Since(start)
+
+	if evidence.SearchStatus != SearchStatusPartial && evidence.SearchStatus != SearchStatusFailed {
+		t.Errorf("expected partial or failed status, got %s", evidence.SearchStatus)
+	}
+	if len(evidence.SearchErrors) == 0 {
+		t.Error("expected recorded search errors")
+	}
+	if elapsed > 3*time.Second {
+		t.Fatalf("engine took %s; the provider deadline was not honored", elapsed)
 	}
 }
 

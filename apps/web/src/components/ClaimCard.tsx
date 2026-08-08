@@ -10,7 +10,6 @@ import type {
   ReasoningStep,
   Recommendation,
 } from '../types';
-import TrustScore from './TrustScore';
 
 const STATUS_META: Record<
   ClaimStatus,
@@ -138,7 +137,7 @@ function ConflictSection({ conflicts }: { conflicts: Contradiction[] }) {
 }
 
 function TimelineSection({ steps }: { steps: ReasoningStep[] }) {
-  if (steps.length === 0) return null;
+  if (!steps || steps.length === 0) return null;
 
   return (
     <div className="mt-3">
@@ -146,14 +145,14 @@ function TimelineSection({ steps }: { steps: ReasoningStep[] }) {
         Timeline
       </h4>
       <ol className="mt-1.5 space-y-2 border-l-2 border-slate-200 pl-3 dark:border-slate-700">
-        {steps.map((step, i) => (
+        {(steps ?? []).map((step, i) => (
           <li key={i} className="relative">
             <span className="absolute -left-[1.35rem] top-1 h-2 w-2 rounded-full bg-cyan-500" />
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{step.title}</p>
             <p className="text-xs text-slate-500 dark:text-slate-400">{step.summary}</p>
-            {step.details.length > 0 && (
+            {(step.details ?? []).length > 0 && (
               <ul className="mt-1 space-y-0.5">
-                {step.details.map((d, j) => (
+                {(step.details ?? []).map((d, j) => (
                   <li key={j} className="text-xs text-slate-500 dark:text-slate-400">
                     {d}
                   </li>
