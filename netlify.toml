@@ -33,5 +33,11 @@
 # event.path = /api/verify (see apps/api/function/api/main.go).
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# Also handle direct function path requests
+[[redirects]]
+  from = "/.netlify/functions/api/*"
+  to = "/.netlify/functions/api/:splat"
   status = 200
