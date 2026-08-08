@@ -8,7 +8,7 @@
 # apps/api/function and served at /api on the same origin.
 
 [build]
-  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build"
+  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build && cd apps/api && go build -o function/api ./function/api.go"
   publish = "apps/web/.next"
 
 [build.environment]
@@ -27,12 +27,14 @@
   # Netlify's Next.js runtime: serves the .next build output from apps/web.
   package = "@netlify/plugin-nextjs"
 
-# Expose the TrustCheck API Function at a clean prefix on the same
-# origin as the frontend. We use /trustcheck-api instead of /api because
-# @netlify/plugin-nextjs intercepts all /api/* routes before Netlify
-# Functions can handle them. The frontend will call /trustcheck-api/verify
-# and this redirect maps it to the Go Function.
+# Route /api/* to the Go Netlify Function. This redirect must come
+# before any @netlify/plugin-nextjs redirects so the API is served
+# by the Go function rather than the Next.js SPA fallback.
 [[redirects]]
-  from = "/trustcheck-api/*"
+  from = "/api/*"
+  to = "/.netlify/functions/api"
+  status = 200
+[[redirects]]
+  from = "/api"
   to = "/.netlify/functions/api"
   status = 200

@@ -38,13 +38,13 @@ func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 }
 
 // normalizePath maps whatever path Netlify delivers to the route the router
-// expects. When the function is reached through the /trustcheck-api/* rewrite,
-// the event path is the original request path (/trustcheck-api/verify); when
-// called directly it is the raw function path (/.netlify/functions/api/verify).
+// expects. When the function is reached through the /api/* redirect, the
+// event path is the original request path (/api/verify); when called directly
+// it is the raw function path (/.netlify/functions/api/verify).
 // Both are normalized to /api/verify.
 func normalizePath(path string) string {
 	const rawPrefix = "/.netlify/functions/api"
-	const publicPrefix = "/trustcheck-api"
+	const publicPrefix = "/api"
 
 	if strings.HasPrefix(path, rawPrefix) {
 		path = strings.TrimPrefix(path, rawPrefix)
