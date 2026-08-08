@@ -287,10 +287,53 @@ export function renderReportHTML(result: VerifyResponse): string {
       .join('\n');
     sections.push(`<h2>Recommendations</h2><ul>\n${recItems}\n</ul>`);
   }
-
   if (result.reasoning?.length) {
     const reasoningItems = result.reasoning.map((r) => `<li>${escapeHtml(r)}</li>`).join('\n');
     sections.push(`<h2>Raw AI Reasoning</h2><ul>\n${reasoningItems}\n</ul>`);
+  }
+
+  // Phase 13: per-claim sections
+  if (result.claims?.length) {
+    sections.push(`<h2>Extracted Claims (${result.claims.length})</h2>`);
+    for (const claim of result.claims) {
+      const statusLabel =
+        claim.status === 'verified'
+          ? '\u2713 Verified'
+          : claim.status === 'partially_verified'
+            ? '\u26a0 Partially Verified'
+            : claim.status === 'unverified'
+              ? '\u2717 Unverified'
+              : '? No Reliable Evidence';
+      const supporting = (claim.evidence ?? []).filter((e) => e.result === 'pass');
+      const contradicting = (claim.evidence ?? []).filter(
+        (e) => e.result === 'fail' || e.result === 'warning',
+      );
+
+      let claimHtml = `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:12px 0;">`;
+      claimHtml += `<h3 style="margin:0 0 8px;font-size:14px;">${statusLabel} — ${escapeHtml(claim.text)}</h3>`;
+      if (claim.confidence !== undefined) {
+        claimHtml += `<p style="margin:0 0 8px;color:#64748b;font-size:12px;">Confidence: ${claim.confidence}%</p>`;
+      }
+      if (claim.summary) {
+        claimHtml += `<p style="margin:0 0 8px;">${escapeHtml(claim.summary)}</p>`;
+      }
+      if (supporting.length) {
+        claimHtml += `<p style="margin:8px 0 4px;font-weight:600;font-size:12px;">Supporting:</p><ul style="margin:0;padding-left:20px;">`;
+        for (const e of supporting) {
+          claimHtml += `<li style="color:#16a34a;">${escapeHtml(e.label)}</li>`;
+        }
+        claimHtml += `</ul>`;
+      }
+      if (contradicting.length) {
+        claimHtml += `<p style="margin:8px 0 4px;font-weight:600;font-size:12px;">Contradicting:</p><ul style="margin:0;padding-left:20px;">`;
+        for (const e of contradicting) {
+          claimHtml += `<li style="color:#dc2626;">${escapeHtml(e.label)}</li>`;
+        }
+        claimHtml += `</ul>`;
+      }
+      claimHtml += `</div>`;
+      sections.push(claimHtml);
+    }
   }
 
   return `<!doctype html>

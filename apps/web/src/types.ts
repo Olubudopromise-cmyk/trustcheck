@@ -98,6 +98,25 @@ export interface ChangeEvent {
   event: string;
 }
 
+// Phase 13: multi-claim types
+export type ClaimStatus = 'verified' | 'partially_verified' | 'unverified' | 'no_reliable_evidence';
+
+export interface Claim {
+  id: string;
+  text: string;
+  entities?: Entity[];
+  keywords?: string[];
+  verdict?: Verdict;
+  confidence?: number;
+  evidence?: EvidenceItem[];
+  conflicts?: Contradiction[];
+  summary?: string;
+  timeline?: ReasoningStep[];
+  recommendations?: Recommendation[];
+  missingInformation?: MissingInfo[];
+  status?: ClaimStatus;
+}
+
 export type VerifyResponse = {
   input: string;
   type: string;
@@ -132,7 +151,85 @@ export type VerifyResponse = {
   suggestedReadingNote?: string;
   whatChanged?: ChangeEvent[];
   whatChangedNote?: string;
+  // Phase 13: intelligent claim extraction. Optional so results saved in
+  // local history before this extension shipped still render.
+  claims?: Claim[];
+  claimCount?: number;
+  verifiedClaims?: number;
+  partialClaims?: number;
+  unverifiedClaims?: number; // Evidence Depth & Analysis Modes. Optional for backward compatibility.
+  analysisMode?: AnalysisMode;
+  evidenceLedger?: EvidenceLedger;
+  scoreExplanation?: ScoreExplanation;
+  sourceIntelligence?: SourceIntelligence[];
+  // Security Intelligence Engine. Optional for security_review mode.
+  securityReport?: SecurityReport;
 };
+
+// Evidence Depth & Analysis Modes types
+export type AnalysisMode = 'quick' | 'deep_research' | 'government_official';
+
+export interface AnalysisSettings {
+  mode: AnalysisMode;
+  searchDepth: number;
+  maxSources: number;
+  requireIndependentSources: boolean;
+  searchContradictions: boolean;
+  prioritizeGovernmentSources: boolean;
+  prioritizeAcademicSources: boolean;
+  prioritizePrimarySources: boolean;
+  minimumEvidenceThreshold: number;
+}
+
+export type SourceType =
+  'official' | 'institutional' | 'journalism' | 'community' | 'academic' | 'commercial' | 'unknown';
+export type SourceRelation = 'primary' | 'secondary' | 'tertiary';
+
+export interface SourceIntelligence {
+  title: string;
+  domain?: string;
+  publicationDate?: string;
+  sourceType: SourceType;
+  relation: SourceRelation;
+  isOfficial: boolean;
+  author?: string;
+  citation?: string;
+  relevance: number;
+  supportsClaim: boolean;
+  contradictsClaim: boolean;
+  isIndependent: boolean;
+  confidence: number;
+}
+
+export interface LedgerEntry {
+  source: SourceIntelligence;
+  summary: string;
+  strength: number;
+  notes?: string;
+}
+
+export interface EvidenceLedger {
+  claim: string;
+  supporting: LedgerEntry[];
+  contradicting: LedgerEntry[];
+  unknown: string[];
+  totalSources: number;
+  independentCount: number;
+  duplicateCount: number;
+}
+
+export interface ScoreExplanation {
+  evidenceStrength: number;
+  evidenceStrengthNote: string;
+  sourceQuality: number;
+  sourceQualityNote: string;
+  independentConfirmation: number;
+  independentNote: string;
+  contradictionRisk: number;
+  contradictionNote: string;
+  missingEvidence: number;
+  missingNote: string;
+}
 
 export interface VerificationHistoryItem {
   id: string;
@@ -144,3 +241,102 @@ export interface VerificationHistoryItem {
 export type ApiError = {
   error: string;
 };
+
+// Security Intelligence Engine types
+export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+
+export type FindingStatus =
+  | 'CONFIRMED'
+  | 'REQUIRES_REVIEW'
+  | 'FALSE_POSITIVE'
+  | 'NOT_FIXED'
+  | 'PARTIALLY_FIXED'
+  | 'FIXED'
+  | 'UNVERIFIED';
+
+export type SecurityCategory =
+  | 'injection'
+  | 'authentication_weakness'
+  | 'authorization_flaw'
+  | 'insecure_direct_object_reference'
+  | 'server_side_request_forgery'
+  | 'cross_site_scripting'
+  | 'cross_site_request_forgery'
+  | 'insecure_deserialization'
+  | 'path_traversal'
+  | 'command_execution'
+  | 'secrets_exposure'
+  | 'insecure_cryptography'
+  | 'weak_password_handling'
+  | 'unsafe_file_handling'
+  | 'insecure_http_configuration'
+  | 'dependency_vulnerability'
+  | 'excessive_permissions'
+  | 'unsafe_error_handling'
+  | 'missing_security_controls';
+
+export interface SecurityFinding {
+  id: string;
+  title: string;
+  severity: Severity;
+  confidence: number;
+  category: SecurityCategory;
+  file: string;
+  line?: number;
+  endLine?: number;
+  description: string;
+  securityImpact: string;
+  evidence: string;
+  remediation: string;
+  patch?: string;
+  references?: string[];
+  status: FindingStatus;
+  evidenceType: string;
+}
+
+export interface DependencyRisk {
+  package: string;
+  version: string;
+  vulnerability: string;
+  severity: Severity;
+  affectedVersions: string;
+  recommendedUpgrade: string;
+  isAffected: boolean;
+  advisorySource: string;
+  retrievalDate: string;
+}
+
+export interface RecommendedFix {
+  findingId: string;
+  priority: number;
+  explanation: string;
+  patch?: string;
+}
+
+export interface VerificationResult {
+  findingId: string;
+  status: string;
+  details: string;
+}
+
+export interface SecurityReport {
+  executiveSummary: string;
+  securityScore: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  infoCount: number;
+  findings: SecurityFinding[];
+  dependencyRisks: DependencyRisk[];
+  recommendedFixes: RecommendedFix[];
+  verificationResults?: VerificationResult[];
+  remainingRisks: string[];
+  evidenceType: string;
+}
+
+export interface SecurityResponse {
+  report: SecurityReport;
+}
+
+export type SecurityMode = 'security_review';

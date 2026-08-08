@@ -3,7 +3,11 @@
 import { memo } from 'react';
 import type { VerifyResponse } from '../types';
 import AISummary from './AISummary';
+import ClaimCard from './ClaimCard';
+import ClaimsList from './ClaimsList';
 import CollapsibleSection from './CollapsibleSection';
+import EvidenceLedger from './EvidenceLedger';
+import ScoreExplanation from './ScoreExplanation';
 import ConfidenceBreakdown from './ConfidenceBreakdown';
 import ContradictingEvidence from './ContradictingEvidence';
 import EvidenceList from './EvidenceList';
@@ -17,6 +21,7 @@ import RecommendationsList from './RecommendationsList';
 import ReasoningTimeline from './ReasoningTimeline';
 import StatusBadge from './StatusBadge';
 import SuggestedReading from './SuggestedReading';
+import SecurityFindings from './SecurityFindings';
 import SupportingEvidence from './SupportingEvidence';
 import TrustScore from './TrustScore';
 import TypeIcon, { typeLabel } from './TypeIcon';
@@ -96,7 +101,6 @@ function ResultCard({ result }: { result: VerifyResponse }) {
           <div className="mt-3">
             <ReasoningTimeline steps={result.timeline} />
           </div>
-
           {/* Overall assessment */}
           <section
             aria-label="Overall assessment"
@@ -107,16 +111,28 @@ function ResultCard({ result }: { result: VerifyResponse }) {
               <div className="min-w-0 flex-1">
                 <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
                   {result.summary}
-                </p>
+                </p>{' '}
                 {result.confidence !== undefined && (
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     Analysis confidence: {result.confidence}%
                   </p>
                 )}
+                {result.claimCount !== undefined && result.claimCount > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                      {result.verifiedClaims ?? 0} verified
+                    </span>
+                    <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
+                      {result.partialClaims ?? 0} partial
+                    </span>
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                      {result.unverifiedClaims ?? 0} unverified
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </section>
-
           <div className="mt-3">
             <MainClaimSection
               claim={result.keyClaim}
@@ -124,7 +140,6 @@ function ResultCard({ result }: { result: VerifyResponse }) {
               keywords={result.keywords}
             />
           </div>
-
           {/* Multi-perspective fact analysis, in the spec order. */}
           <div className="mt-3 space-y-3">
             <CollapsibleSection title="AI Summary" defaultOpen>
@@ -180,8 +195,43 @@ function ResultCard({ result }: { result: VerifyResponse }) {
                 note={result.suggestedReadingNote}
               />
             </CollapsibleSection>
-          </div>
-
+          </div>{' '}
+          {/* Security Findings - Security Intelligence Engine */}
+          {result.securityReport && (
+            <div className="mt-3">
+              <CollapsibleSection title="Security Analysis" defaultOpen>
+                <SecurityFindings report={result.securityReport} />
+              </CollapsibleSection>
+            </div>
+          )}
+          {/* Score Explanation - Evidence Depth */}
+          {result.scoreExplanation && (
+            <div className="mt-3">
+              <CollapsibleSection title="Score Explanation" defaultOpen>
+                <ScoreExplanation explanation={result.scoreExplanation} />
+              </CollapsibleSection>
+            </div>
+          )}
+          {/* Evidence Ledger - Evidence Depth */}
+          {result.evidenceLedger && (
+            <div className="mt-3">
+              <CollapsibleSection title="Evidence Ledger" defaultOpen>
+                <EvidenceLedger ledger={result.evidenceLedger} />
+              </CollapsibleSection>
+            </div>
+          )}
+          {/* Phase 13: extracted claims */}
+          {result.claims && result.claims.length > 0 && (
+            <div className="mt-3">
+              <CollapsibleSection
+                title="Verified Claims"
+                badge={result.claimCount ? String(result.claimCount) : undefined}
+                defaultOpen
+              >
+                <ClaimsList claims={result.claims} />
+              </CollapsibleSection>
+            </div>
+          )}
           {/* Legacy evidence detail, kept for full transparency. */}
           <div className="mt-3">
             <CollapsibleSection
@@ -196,7 +246,6 @@ function ResultCard({ result }: { result: VerifyResponse }) {
               />
             </CollapsibleSection>
           </div>
-
           <div className="mt-3 space-y-3">
             <CollapsibleSection title="Warning Signals">
               <WarningSignals signals={result.warningSignals} />

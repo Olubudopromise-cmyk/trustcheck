@@ -7,8 +7,10 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,13 +21,29 @@ import (
 	"github.com/pamierin/trustcheck/apps/api/internal/model"
 	"github.com/pamierin/trustcheck/apps/api/internal/ratelimit"
 	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
+	"github.com/pamierin/trustcheck/apps/api/internal/security"
 	"github.com/pamierin/trustcheck/apps/api/internal/spec"
 	"github.com/pamierin/trustcheck/apps/api/internal/verifier"
 	"github.com/swaggest/swgui/v5emb"
 )
 
 type verifyRequest struct {
-	Input string `json:"input"`
+	Input string           `json:"input"`
+	Mode  model.AnalysisMode `json:"mode,omitempty"`
+}
+
+// securityRequest is the /security request body.
+type securityRequest struct {
+	Code     string            `json:"code"`
+	Filename string            `json:"filename"`
+	Language string            `json:"language,omitempty"`
+	Files    map[string]string `json:"files,omitempty"` // Additional files for dependency scanning
+}
+
+// securityResponse is the /security response body.
+type securityResponse struct {
+	Report         *model.SecurityReport  `json:"report"`
+	DependencyRisks []model.DependencyRisk `json:"dependencyRisks,omitempty"`
 }
 
 // verifyResponse is the /verify response body. The legacy fields
@@ -65,6 +83,19 @@ type verifyResponse struct {
 	SuggestedReadingNote  string                    `json:"suggestedReadingNote,omitempty"`
 	WhatChanged           []model.ChangeEvent       `json:"whatChanged"`
 	WhatChangedNote       string                    `json:"whatChangedNote,omitempty"`
+
+	// Phase 13: intelligent claim extraction.
+	Claims          []model.Claim `json:"claims"`
+	ClaimCount      int           `json:"claimCount"`
+	VerifiedClaims  int           `json:"verifiedClaims"`
+	PartialClaims   int           `json:"partialClaims"`
+	UnverifiedClaims int          `json:"unverifiedClaims"`
+
+	// Evidence Depth & Analysis Modes.
+	AnalysisMode      model.AnalysisMode          `json:"analysisMode"`
+	EvidenceLedger    model.EvidenceLedger        `json:"evidenceLedger"`
+	ScoreExplanation  model.ScoreExplanation      `json:"scoreExplanation"`
+	SourceIntelligence []model.SourceIntelligence  `json:"sourceIntelligence"`
 }
 
 // NewRouter builds the fully configured TrustCheck API router.
@@ -81,7 +112,7 @@ func NewRouter(prefix string) *gin.Engine {
 
 	// analyzer runs the explainable-AI pipeline. Future modules (live web
 	// search, fact-check integrations, ...) are registered here.
-	analyzer := analysis.New()
+	baseAnalyzer := analysis.New()
 
 	limiter := ratelimit.New(ratelimit.Options{
 		Rate:  1, // 60 requests per minute
@@ -121,6 +152,14 @@ func NewRouter(prefix string) *gin.Engine {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "input is required"})
 			return
 		}
+
+		// Determine analysis mode from request, defaulting to quick.
+		mode := req.Mode
+		if mode == "" {
+			mode = model.ModeQuick
+		}
+		settings := model.DefaultSettings(mode)
+		analyzer := baseAnalyzer.WithSettings(settings)
 
 		detected := classifier.Detect(req.Input)
 		vr := verifier.Verify(detected, req.Input)
@@ -162,10 +201,130 @@ func NewRouter(prefix string) *gin.Engine {
 			SuggestedReadingNote:  result.SuggestedReadingNote,
 			WhatChanged:           result.WhatChanged,
 			WhatChangedNote:       result.WhatChangedNote,
+			Claims:                result.Claims,
+			ClaimCount:            result.ClaimCount,
+			VerifiedClaims:        result.VerifiedClaims,
+			PartialClaims:         result.PartialClaims,
+			UnverifiedClaims:      result.UnverifiedClaims,
+			AnalysisMode:          result.AnalysisMode,
+			EvidenceLedger:        result.EvidenceLedger,
+			ScoreExplanation:      result.ScoreExplanation,
+			SourceIntelligence:    result.SourceIntelligence,
+		})
+	})
+
+	// Security analysis endpoint
+	r.POST(prefix+"/security", ratelimit.RateLimit(limiter), func(c *gin.Context) {
+		var req securityRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: code is required"})
+			return
+		}
+		if req.Code == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "code is required"})
+			return
+		}
+		if req.Filename == "" {
+			req.Filename = "unknown"
+		}
+		if req.Language == "" {
+			req.Language = detectLanguage(req.Filename)
+		}
+
+		securityAnalyzer := security.New()
+		report := securityAnalyzer.Analyze(req.Filename, req.Code, req.Language)
+
+		// Perform dependency scanning if files are provided
+		var depRisks []model.DependencyRisk
+		if len(req.Files) > 0 {
+			depRisks = securityAnalyzer.AnalyzeDependencies(req.Files)
+			report.DependencyRisks = depRisks
+
+			// Add dependency findings to report
+			for i, risk := range depRisks {
+				if risk.IsAffected {
+					findingID := len(report.Findings) + i + 1
+					report.Findings = append(report.Findings, model.SecurityFinding{
+						ID:             fmt.Sprintf("SEC-%04d", findingID),
+						Title:          fmt.Sprintf("Vulnerable Dependency: %s", risk.Package),
+						Severity:       risk.Severity,
+						Confidence:     90,
+						Category:       model.CategoryDependencyRisk,
+						File:           risk.Package,
+						Description:    fmt.Sprintf("Package %s@%s has known vulnerability %s.", risk.Package, risk.Version, risk.Vulnerability),
+						SecurityImpact: risk.Description,
+						Evidence: fmt.Sprintf("Package: %s\nVersion: %s\nVulnerability: %s\nAffected: %s",
+							risk.Package, risk.Version, risk.Vulnerability, risk.AffectedVersions),
+						Remediation: fmt.Sprintf("Upgrade to version %s or later.", risk.RecommendedUpgrade),
+						References:  []string{fmt.Sprintf("https://nvd.nist.gov/vuln/detail/%s", risk.Vulnerability)},
+						Status:      model.FindingConfirmed,
+						EvidenceType: "external_research",
+					})				}
+			}
+
+			// Update severity counts
+			for _, risk := range depRisks {
+				if risk.IsAffected {
+					switch risk.Severity {
+					case model.SeverityCritical:
+						report.CriticalCount++
+					case model.SeverityHigh:
+						report.HighCount++
+					case model.SeverityMedium:
+						report.MediumCount++
+					case model.SeverityLow:
+						report.LowCount++
+					case model.SeverityInfo:
+						report.InfoCount++
+					}
+				}
+			}
+		}
+
+		logging.AddRequestAttrs(c,
+			"filename", req.Filename,
+			"language", req.Language,
+			"securityScore", report.SecurityScore,
+			"findings", len(report.Findings),
+			"dependencyRisks", len(depRisks),
+		)
+
+		c.JSON(http.StatusOK, securityResponse{
+			Report:          report,
+			DependencyRisks: depRisks,
 		})
 	})
 
 	return r
+}
+
+// detectLanguage detects the programming language from the filename extension.
+func detectLanguage(filename string) string {
+	lower := strings.ToLower(filename)
+	switch {
+	case strings.HasSuffix(lower, ".go"):
+		return "go"
+	case strings.HasSuffix(lower, ".js") || strings.HasSuffix(lower, ".jsx"):
+		return "javascript"
+	case strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".tsx"):
+		return "typescript"
+	case strings.HasSuffix(lower, ".py"):
+		return "python"
+	case strings.HasSuffix(lower, ".java"):
+		return "java"
+	case strings.HasSuffix(lower, ".rb"):
+		return "ruby"
+	case strings.HasSuffix(lower, ".php"):
+		return "php"
+	case strings.HasSuffix(lower, ".rs"):
+		return "rust"
+	case strings.HasSuffix(lower, ".cs"):
+		return "csharp"
+	case strings.HasSuffix(lower, ".cpp") || strings.HasSuffix(lower, ".c"):
+		return "cpp"
+	default:
+		return "unknown"
+	}
 }
 
 // corsMiddleware enables cross-origin requests from the allowed frontend

@@ -7,10 +7,16 @@
 // extraction; for structured identifiers (domains, emails, phones, ...) it
 // produces the trustworthiness claim under review and extracts whatever entity
 // the identifier refers to.
+//
+// Phase 13 adds ExtractMultiple, which splits long articles into 1-10
+// independent factual claims, filters out opinions/jokes/predictions, merges
+// duplicates, and detects claim relationships.
 package claims
 
 import (
+	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pamierin/trustcheck/apps/api/internal/classifier"
@@ -102,7 +108,8 @@ var months = map[string]bool{
 var dateWords = map[string]bool{
 	"yesterday": true, "today": true, "tomorrow": true, "tonight": true,
 	"last week": true, "this week": true, "last month": true, "this month": true,
-	"last year": true, "this year": true, "monday": true, "tuesday": true,
+	"last year": true, "this year": true, "next week": true, "next month": true,
+	"next year": true, "monday": true, "tuesday": true,
 	"wednesday": true, "thursday": true, "friday": true, "saturday": true,
 	"sunday": true,
 }
@@ -131,6 +138,347 @@ func Extract(input string, inputType classifier.InputType) Claim {
 		return extractIdentifier(trimmed, inputType)
 	}
 	return extractText(trimmed)
+}
+
+// MultiClaim is a single extracted factual claim with its metadata.
+// It extends Claim with an ID, original position in the text, and
+// relationship information.
+type MultiClaim struct {
+	ID          string
+	Text        string
+	Entities    []Entity
+	Keywords    []string
+	Position    int    // sentence index in the original text
+	DependsOn   []string // IDs of claims this one depends on
+}
+
+// ExtractMultiple splits the input into 1-10 independent factual claims.
+// For structured inputs (domain, email, etc.) it returns a single claim.
+// For free-form text it splits into sentences, filters for factual claims,
+// merges duplicates, and detects dependencies.
+func ExtractMultiple(input string, inputType classifier.InputType) []MultiClaim {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return []MultiClaim{{
+			ID:   "claim-0",
+			Text: "No claim could be extracted from empty input.",
+		}}
+	}
+
+	// Structured inputs always produce exactly one claim.
+	if inputType != classifier.TypeUnknown {
+		single := extractIdentifier(trimmed, inputType)
+		return []MultiClaim{{
+			ID:       "claim-0",
+			Text:     single.MainClaim,
+			Entities: single.Entities,
+			Keywords: single.Keywords,
+		}}
+	}
+
+	// Split into sentences.
+	sentences := splitSentences(trimmed)
+	if len(sentences) == 0 {
+		return []MultiClaim{{
+			ID:   "claim-0",
+			Text: normalizeSentence(trimmed),
+		}}
+	}
+
+	// Filter for factual claims and extract entities/keywords.
+	var candidates []MultiClaim
+	for i, sent := range sentences {
+		if !isFactualClaim(sent) {
+			continue
+		}
+		claim := extractText(sent)
+		mc := MultiClaim{
+			ID:       fmt.Sprintf("claim-%d", len(candidates)),
+			Text:     claim.MainClaim,
+			Entities: claim.Entities,
+			Keywords: claim.Keywords,
+			Position: i,
+		}
+		mc.Keywords = claim.Keywords
+		candidates = append(candidates, mc)
+	}
+
+	// If no factual claims found, fall back to the full text as one claim.
+	if len(candidates) == 0 {
+		claim := extractText(trimmed)
+		return []MultiClaim{{
+			ID:       "claim-0",
+			Text:     claim.MainClaim,
+			Entities: claim.Entities,
+			Keywords: claim.Keywords,
+		}}
+	}
+
+	// Cap at 10 claims.
+	if len(candidates) > 10 {
+		candidates = candidates[:10]
+	}
+
+	// Merge duplicates.
+	candidates = mergeDuplicates(candidates)
+
+	// Detect dependencies.
+	candidates = detectDependencies(candidates)
+
+	return candidates
+}
+
+// splitSentences breaks text into individual sentences.
+func splitSentences(text string) []string {
+	// Split on sentence-ending punctuation followed by whitespace or end.
+	re := regexp.MustCompile(`[.!?]+\s+`)
+	parts := re.Split(text, -1)
+
+	var sentences []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		sentences = append(sentences, normalizeSentence(p))
+	}
+	return sentences
+}
+
+// isFactualClaim reports whether a sentence is a verifiable factual claim
+// rather than an opinion, joke, prediction, rhetorical question, or
+// advertisement.
+func isFactualClaim(sentence string) bool {
+	lower := strings.ToLower(sentence)
+	trimmed := strings.TrimSpace(sentence)
+
+	// Too short to be a meaningful claim.
+	if len(trimmed) < 10 {
+		return false
+	}
+
+	// Skip rhetorical questions.
+	if strings.HasSuffix(trimmed, "?") {
+		return false
+	}
+
+	// Skip predictions and future tense statements.
+	predictionPrefixes := []string{
+		"will", "could", "would", "should", "might", "may",
+		"expect", "predict", "forecast", "anticipate",
+		"plan to", "going to", "about to",
+	}
+	for _, prefix := range predictionPrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return false
+		}
+	}
+
+	// Skip opinions and subjective statements.
+	opinionMarkers := []string{
+		"i think", "i believe", "in my opinion", "i feel",
+		"it seems", "it appears", "arguably", "supposedly",
+		"beautiful", "ugly", "best", "worst", "amazing",
+		"terrible", "awesome", "horrible", "love", "hate",
+		"favorite", "prefer", "nice", "good", "bad",
+		"like", "dislike", "enjoy", "prefer", "tasty",
+		"boring", "exciting", "fun", "enjoyable",
+	}
+	for _, marker := range opinionMarkers {
+		if strings.Contains(lower, marker) {
+			return false
+		}
+	}
+
+	// Skip jokes and satire indicators.
+	jokeMarkers := []string{
+		"just kidding", "jk", "lol", "lmao", "haha",
+		"funny", "joke", "satire", "satirical",
+		"the onion", "theonion",
+	}
+	for _, marker := range jokeMarkers {
+		if strings.Contains(lower, marker) {
+			return false
+		}
+	}
+
+	// Skip advertisements.
+	adMarkers := []string{
+		"buy now", "click here", "limited time", "act now",
+		"discount", "coupon", "promo code", "free shipping",
+		"subscribe", "sign up now",
+	}
+	for _, marker := range adMarkers {
+		if strings.Contains(lower, marker) {
+			return false
+		}
+	}
+
+	// Skip personal feelings and emotions.
+	feelingMarkers := []string{
+		"i am happy", "i am sad", "i am angry", "i am excited",
+		"i am worried", "i am concerned",
+	}
+	for _, marker := range feelingMarkers {
+		if strings.Contains(lower, marker) {
+			return false
+		}
+	}
+
+	// Must contain at least one entity or be a concrete assertion.
+	// A factual claim typically mentions a named entity, a number,
+	// or a date.
+	// commonWords are capitalized words that are NOT real entities
+	// (they appear at sentence start due to capitalization rules).
+	commonWords := map[string]bool{
+		"the": true, "a": true, "an": true, "this": true, "that": true,
+		"these": true, "those": true, "it": true, "its": true, "they": true,
+		"their": true, "there": true, "here": true, "where": true, "when": true,
+		"how": true, "what": true, "which": true, "who": true, "whom": true,
+		"but": true, "and": true, "or": true, "if": true, "so": true,
+		"yet": true, "for": true, "nor": true, "not": true, "also": true,
+		"just": true, "only": true, "even": true, "still": true, "already": true,
+	}
+	hasEntity := false
+	words := strings.Fields(sentence)
+	for _, w := range words {
+		clean := strings.ToLower(trimPunct(w))
+		if knownOrganizations[clean] || knownLocations[clean] ||
+			months[clean] || dateWords[clean] {
+			hasEntity = true
+			break
+		}
+		if titleCaseRegex.MatchString(w) && len(clean) > 1 && !commonWords[clean] {
+			hasEntity = true
+			break
+		}
+	}
+	if !hasEntity {
+		// Check for numbers (statistics, dates, quantities).
+		hasNumber := false
+		for _, w := range words {
+			if _, err := strconv.Atoi(trimPunct(w)); err == nil {
+				hasNumber = true
+				break
+			}
+		}
+		if !hasNumber {
+			return false
+		}
+	}
+
+	return true
+}
+
+// mergeDuplicates merges claims that are substantively the same.
+// Two claims are considered duplicates if they share >60% of their keywords.
+func mergeDuplicates(claims []MultiClaim) []MultiClaim {
+	if len(claims) <= 1 {
+		return claims
+	}
+
+	merged := make([]MultiClaim, 0, len(claims))
+	used := make([]bool, len(claims))
+
+	for i := range claims {
+		if used[i] {
+			continue
+		}
+		base := claims[i]
+		for j := i + 1; j < len(claims); j++ {
+			if used[j] {
+				continue
+			}
+			if areSimilar(base, claims[j]) {
+				used[j] = true
+				// Keep the longer, more detailed version.
+				if len(claims[j].Text) > len(base.Text) {
+					base = claims[j]
+				}
+			}
+		}
+		merged = append(merged, base)
+	}
+
+	// Re-number IDs.
+	for i := range merged {
+		merged[i].ID = fmt.Sprintf("claim-%d", i)
+	}
+	return merged
+}
+
+// areSimilar reports whether two claims are substantively the same.
+func areSimilar(a, b MultiClaim) bool {
+	if len(a.Keywords) == 0 || len(b.Keywords) == 0 {
+		return false
+	}
+
+	setB := make(map[string]bool, len(b.Keywords))
+	for _, k := range b.Keywords {
+		setB[k] = true
+	}
+
+	shared := 0
+	for _, k := range a.Keywords {
+		if setB[k] {
+			shared++
+		}
+	}
+
+	// Threshold: share >60% of the smaller keyword set.
+	minLen := len(a.Keywords)
+	if len(b.Keywords) < minLen {
+		minLen = len(b.Keywords)
+	}
+	return shared > 0 && float64(shared)/float64(minLen) > 0.6
+}
+
+// detectDependencies identifies claims that depend on other claims.
+// A claim depends on another if it references a pronoun or entity from
+// the earlier claim, or if it uses connectors like "because", "therefore",
+// "as a result", "due to".
+func detectDependencies(claims []MultiClaim) []MultiClaim {
+	if len(claims) <= 1 {
+		return claims
+	}
+
+	for i := range claims {
+		if i == 0 {
+			continue
+		}
+		lower := strings.ToLower(claims[i].Text)
+
+		// Check for dependency connectors.
+		dependencyConnectors := []string{
+			"because", "therefore", "as a result", "due to",
+			"consequently", "thus", "hence", "since",
+			"after", "following", "subsequently",
+		}
+		for _, conn := range dependencyConnectors {
+			if strings.Contains(lower, conn) {
+				// Depend on the immediately preceding claim.
+				claims[i].DependsOn = []string{claims[i-1].ID}
+				break
+			}
+		}
+
+		// Check for pronoun references to entities in previous claims.
+		pronouns := []string{"it", "its", "they", "them", "their", "this", "that"}
+		for _, pronoun := range pronouns {
+			if strings.Contains(" "+lower+" ", " "+pronoun+" ") {
+				// Find the previous claim that has entities.
+				for j := i - 1; j >= 0; j-- {
+					if len(claims[j].Entities) > 0 {
+						claims[i].DependsOn = []string{claims[j].ID}
+						break
+					}
+				}
+				break
+			}
+		}
+	}
+
+	return claims
 }
 
 // extractIdentifier builds the trustworthiness claim for a structured input
@@ -271,6 +619,17 @@ func stem(word string) string {
 	default:
 		return word
 	}
+}
+
+// trimPunct strips leading and trailing punctuation from a word.
+func trimPunct(w string) string {
+	return strings.TrimFunc(w, func(r rune) bool {
+		switch r {
+		case '.', ',', ';', ':', '!', '?', '\'', '"', '(', ')':
+			return true
+		}
+		return false
+	})
 }
 
 // normalizeSentence collapses whitespace and strips trailing punctuation so

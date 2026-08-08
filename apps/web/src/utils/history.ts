@@ -86,6 +86,12 @@ export function addHistoryItem(input: string, result: VerifyResponse): Verificat
   return next;
 }
 
+export function removeHistoryItem(id: string): VerificationHistoryItem[] {
+  const next = loadHistory().filter((entry) => entry.id !== id);
+  saveHistory(next);
+  return next;
+}
+
 export function clearHistory(): void {
   if (typeof window === 'undefined') {
     return;

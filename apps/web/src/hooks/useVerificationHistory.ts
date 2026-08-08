@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 import type { VerificationHistoryItem, VerifyResponse } from '../types';
-import { addHistoryItem, clearHistory, loadHistory } from '../utils/history';
+import { addHistoryItem, clearHistory, loadHistory, removeHistoryItem } from '../utils/history';
 
 // useVerificationHistory mirrors localStorage-backed verification history into
 // React state. localStorage is treated as an external store via
@@ -52,6 +52,13 @@ export function useVerificationHistory() {
   const remember = useCallback((input: string, result: VerifyResponse) => {
     items = addHistoryItem(input, result);
     emit();
+    // Return the newly created item so callers can set it as active.
+    return items[0] ?? null;
+  }, []);
+
+  const remove = useCallback((id: string) => {
+    items = removeHistoryItem(id);
+    emit();
   }, []);
 
   const clear = useCallback(() => {
@@ -60,5 +67,5 @@ export function useVerificationHistory() {
     emit();
   }, []);
 
-  return { history, remember, clear };
+  return { history, remember, remove, clear };
 }

@@ -1,4 +1,4 @@
-import type { ApiError, VerifyResponse } from '../types';
+import type { AnalysisMode, ApiError, VerifyResponse } from '../types';
 
 // API_BASE_URL resolves where the browser reaches the TrustCheck API.
 // Production (Netlify) serves the API as a Function mounted at /api on the
@@ -26,13 +26,13 @@ export class ApiRequestError extends Error {
 // verify submits a single input to the TrustCheck API and returns the typed
 // verification result. Network failures are surfaced as a clear, actionable
 // message instead of a raw fetch error.
-export async function verify(input: string): Promise<VerifyResponse> {
+export async function verify(input: string, mode: AnalysisMode = 'quick'): Promise<VerifyResponse> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input }),
+      body: JSON.stringify({ input, mode }),
     });
   } catch {
     throw new Error('Could not reach the TrustCheck API. Is it running?');
