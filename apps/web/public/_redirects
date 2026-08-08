@@ -1,0 +1,5 @@
+# API routes must come before any SPA catch-all
+/api/*    /.netlify/functions/api/:splat    200
+
+# Next.js handles everything else
+/*        /index.html                       200
