@@ -8,10 +8,7 @@
 # apps/api/function and served at /api on the same origin.
 
 [build]
-  # Build the frontend and pre-compile the Go API function.
-  # The Go binary is placed in netlify/functions/api/ (standard location)
-  # so Netlify serves it directly without needing to compile from source.
-  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build && mkdir -p netlify/functions/api && cd apps/api && go build -o ../../netlify/functions/api/api ./function/api/main.go"
+  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build"
   publish = "apps/web/.next"
 
 [build.environment]
@@ -22,34 +19,18 @@
   GO_VERSION = "1.23.3"
 
 [functions]
-  # Pre-compiled Go binary is placed in netlify/functions/api/ during build.
-  directory = "netlify/functions"
+  # The Go Function lives inside the apps/api Go module so Netlify compiles
+  # it against the same go.mod/go.sum (the function is named "api").
+  directory = "apps/api/function"
 
 [[plugins]]
   # Netlify's Next.js runtime: serves the .next build output from apps/web.
   package = "@netlify/plugin-nextjs"
 
-# IMPORTANT: This must come BEFORE the Next.js plugin rules.
 # Expose the TrustCheck API Function at a clean /api prefix on the same
 # origin as the frontend. status = 200 rewrites the request to the Function
 # while preserving the original path, so /api/verify reaches the Function with
 # event.path = /api/verify (see apps/api/function/api/main.go).
-[[redirects]]
-  from = "/api/verify"
-  to = "/.netlify/functions/api"
-  status = 200
-
-[[redirects]]
-  from = "/api/health"
-  to = "/.netlify/functions/api"
-  status = 200
-
-[[redirects]]
-  from = "/api/security"
-  to = "/.netlify/functions/api"
-  status = 200
-
-# Catch-all for other API routes
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api"
