@@ -8,7 +8,11 @@
 # apps/api/function and served at /api on the same origin.
 
 [build]
-  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build"
+  # Build the frontend and pre-compile the Go API function.
+  # The Go function binary is placed into the Netlify Functions directory
+  # so Netlify serves it without needing to resolve go.mod from the
+  # function directory (which sits one level below the module root).
+  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build && cd apps/api && mkdir -p ../../apps/api/function/api && go build -o ../../apps/api/function/api/api ./function/api/main.go"
   publish = "apps/web/.next"
 
 [build.environment]
