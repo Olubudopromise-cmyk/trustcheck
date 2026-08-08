@@ -9,10 +9,9 @@
 
 [build]
   # Build the frontend and pre-compile the Go API function.
-  # The Go function binary is placed into the Netlify Functions directory
-  # so Netlify serves it without needing to resolve go.mod from the
-  # function directory (which sits one level below the module root).
-  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build && cd apps/api && mkdir -p ../../apps/api/function/api && go build -o ../../apps/api/function/api/api ./function/api/main.go"
+  # The Go binary is placed in netlify/functions/api/ (standard location)
+  # so Netlify serves it directly without needing to compile from source.
+  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build && mkdir -p netlify/functions/api && cd apps/api && go build -o ../../netlify/functions/api/api ./function/api/main.go"
   publish = "apps/web/.next"
 
 [build.environment]
@@ -23,9 +22,8 @@
   GO_VERSION = "1.23.3"
 
 [functions]
-  # The Go Function lives inside the apps/api Go module so Netlify compiles
-  # it against the same go.mod/go.sum (the function is named "api").
-  directory = "apps/api/function"
+  # Pre-compiled Go binary is placed in netlify/functions/api/ during build.
+  directory = "netlify/functions"
 
 [[plugins]]
   # Netlify's Next.js runtime: serves the .next build output from apps/web.

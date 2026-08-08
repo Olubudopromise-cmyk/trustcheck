@@ -26,3 +26,4 @@ apps/api/api
 # TypeScript build info
 *.tsbuildinfo
 apps/api/function/api/api
+netlify/functions/
