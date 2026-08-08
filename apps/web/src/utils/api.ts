@@ -8,7 +8,7 @@ import type { AnalysisMode, ApiError, VerifyResponse } from '../types';
 // is hosted elsewhere).
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
-  (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8080');
+  (process.env.NODE_ENV === 'production' ? '/trustcheck-api' : 'http://localhost:8080');
 
 // ApiRequestError is thrown when the API responds with a non-2xx status.
 // status carries the HTTP status code so callers can react to specific errors
