@@ -21,6 +21,7 @@ import (
 	"github.com/pamierin/trustcheck/apps/api/internal/model"
 	"github.com/pamierin/trustcheck/apps/api/internal/ratelimit"
 	"github.com/pamierin/trustcheck/apps/api/internal/scoring"
+	"github.com/pamierin/trustcheck/apps/api/internal/research"
 	"github.com/pamierin/trustcheck/apps/api/internal/security"
 	"github.com/pamierin/trustcheck/apps/api/internal/spec"
 	"github.com/pamierin/trustcheck/apps/api/internal/verifier"
@@ -110,9 +111,16 @@ func NewRouter(prefix string) *gin.Engine {
 
 	logger := logging.New()
 
-	// analyzer runs the explainable-AI pipeline. Future modules (live web
-	// search, fact-check integrations, ...) are registered here.
-	baseAnalyzer := analysis.New()
+	// analyzer runs the explainable-AI pipeline. Modules are registered here.
+	// The research module adds web search capabilities for text claims.
+	// We use a multi-provider that tries DuckDuckGo first, then falls back to
+	// Wikipedia for reliable evidence gathering.
+	duckduckgoProvider := research.NewDuckDuckGoProvider()
+	wikipediaProvider := research.NewWikipediaProvider()
+	researchProvider := research.NewMultiProvider(duckduckgoProvider, wikipediaProvider)
+	researchConfig := research.DefaultSearchConfig()
+	researchModule := research.NewModule(researchProvider, researchConfig)
+	baseAnalyzer := analysis.New(researchModule)
 
 	limiter := ratelimit.New(ratelimit.Options{
 		Rate:  1, // 60 requests per minute
@@ -175,7 +183,7 @@ func NewRouter(prefix string) *gin.Engine {
 			Input:                 req.Input,
 			Type:                  string(detected),
 			Status:                result.Status,
-			TrustScore:            vr.TrustScore,
+			TrustScore:            result.TrustScore,
 			Summary:               vr.Summary,
 			Evidence:              scoring.FilterEnginePlaceholders(vr.Evidence),
 			Verdict:               result.Verdict,

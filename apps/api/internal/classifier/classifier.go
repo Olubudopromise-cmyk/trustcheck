@@ -114,10 +114,71 @@ func Detect(input string) InputType {
 	// 6. Company: a short, letter-leading proper name. Names longer than
 	// maxCompanyWords are treated as free-form text (sentences) so the
 	// explainable analysis can run on them.
+	// We also exclude common sentence patterns (e.g., "The X is Y", "X was Y")
+	// to avoid misclassifying claims as company names.
 	if companyRegex.MatchString(in) && len(strings.Fields(in)) <= maxCompanyWords {
-		return TypeCompany
+		if !looksLikeSentence(in) {
+			return TypeCompany
+		}
 	}
 
 	// 7. Fallback.
 	return TypeUnknown
+}
+
+// looksLikeSentence returns true if the input looks like a sentence or claim
+// rather than a company name. Heuristics:
+// - Starts with common articles (The, A, An)
+// - Contains common verb forms (is, are, was, were, has, have, had, will, can)
+// - Contains common prepositions (of, in, for, on, with, at, by, from)
+// These patterns indicate free-form text claims, not company names.
+func looksLikeSentence(in string) bool {
+	words := strings.Fields(strings.ToLower(in))
+	if len(words) == 0 {
+		return false
+	}
+
+	// Common sentence starters (articles)
+	sentenceStarters := map[string]bool{
+		"the": true, "a": true, "an": true,
+	}
+
+	// Common verbs that appear in sentences
+	commonVerbs := map[string]bool{
+		"is": true, "are": true, "was": true, "were": true,
+		"has": true, "have": true, "had": true,
+		"will": true, "can": true, "could": true, "should": true,
+		"may": true, "might": true, "must": true,
+	}
+
+	// Common prepositions
+	commonPreps := map[string]bool{
+		"of": true, "in": true, "for": true, "on": true,
+		"with": true, "at": true, "by": true, "from": true,
+		"to": true, "into": true, "through": true, "during": true,
+	}
+
+	// Check if it starts with an article
+	if sentenceStarters[words[0]] {
+		return true
+	}
+
+	// Check if it contains common verbs or prepositions (likely a sentence)
+	verbCount := 0
+	prepCount := 0
+	for _, word := range words {
+		if commonVerbs[word] {
+			verbCount++
+		}
+		if commonPreps[word] {
+			prepCount++
+		}
+	}
+
+	// If we have 2+ verbs or 2+ prepositions, it's likely a sentence
+	if verbCount >= 2 || prepCount >= 2 {
+		return true
+	}
+
+	return false
 }
