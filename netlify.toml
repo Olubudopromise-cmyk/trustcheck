@@ -5,10 +5,10 @@
 # Netlify installs dependencies at the root (pnpm is detected via
 # pnpm-lock.yaml) and runs the build command; only the web app is built by
 # the site build. The Go API is compiled by Netlify as a Function from
-# apps/api/function and served at /api on the same origin.
+# apps/api/function into netlify/functions/api and served at /api on the same origin.
 
 [build]
-  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build && cd apps/api && go build -o function/api ./function/api.go"
+  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build && mkdir -p netlify/functions && cd apps/api && go build -o '../../netlify/functions/api' ./function/api.go"
   publish = "apps/web/.next"
 
 [build.environment]
@@ -19,22 +19,22 @@
   GO_VERSION = "1.23.3"
 
 [functions]
-  # The Go Function lives inside the apps/api Go module so Netlify compiles
-  # it against the same go.mod/go.sum (the function is named "api").
-  directory = "apps/api/function"
+  # The Go Function binary is built into netlify/functions so Netlify packages it as a pre-compiled Go binary.
+  directory = "netlify/functions"
 
 [[plugins]]
   # Netlify's Next.js runtime: serves the .next build output from apps/web.
   package = "@netlify/plugin-nextjs"
 
-# Route /api/* to the Go Netlify Function. This redirect must come
-# before any @netlify/plugin-nextjs redirects so the API is served
-# by the Go function rather than the Next.js SPA fallback.
+# Route /api/* to the Go Netlify Function. force = true ensures this rule
+# takes precedence over @netlify/plugin-nextjs SPA routing.
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api"
   status = 200
+  force = true
 [[redirects]]
   from = "/api"
   to = "/.netlify/functions/api"
   status = 200
+  force = true
