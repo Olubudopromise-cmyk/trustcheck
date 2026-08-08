@@ -27,17 +27,28 @@
   # Netlify's Next.js runtime: serves the .next build output from apps/web.
   package = "@netlify/plugin-nextjs"
 
+# IMPORTANT: This must come BEFORE the Next.js plugin rules.
 # Expose the TrustCheck API Function at a clean /api prefix on the same
 # origin as the frontend. status = 200 rewrites the request to the Function
 # while preserving the original path, so /api/verify reaches the Function with
 # event.path = /api/verify (see apps/api/function/api/main.go).
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
+  from = "/api/verify"
+  to = "/.netlify/functions/api"
   status = 200
 
-# Also handle direct function path requests
 [[redirects]]
-  from = "/.netlify/functions/api/*"
-  to = "/.netlify/functions/api/:splat"
+  from = "/api/health"
+  to = "/.netlify/functions/api"
+  status = 200
+
+[[redirects]]
+  from = "/api/security"
+  to = "/.netlify/functions/api"
+  status = 200
+
+# Catch-all for other API routes
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api"
   status = 200
