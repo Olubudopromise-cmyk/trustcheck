@@ -12,7 +12,12 @@ import type {
 export const dynamic = 'force-dynamic';
 export const maxDuration = 10;
 
-// ─── Input Classification ─────────────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────────────
+
+const REQUEST_TIMEOUT_MS = 8000; // Overall request timeout (leaves 2s for response)
+const PROVIDER_TIMEOUT_MS = 3000; // Per-provider timeout
+
+// ─── Input Classification (fallback only — research determines the real type) ──
 
 type InputType =
   | 'url'
@@ -28,113 +33,64 @@ type InputType =
   | 'person'
   | 'unknown';
 
-const MAX_COMPANY_WORDS = 4;
-
 const DOMAIN_RE = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
-const COMPANY_RE = /^[A-Za-z][A-Za-z0-9\s.'-]{0,63}$/;
 const PHONE_RE = /^\+\d{6,15}$/;
 
-// Government-related keywords
-const GOV_KEYWORDS = [
-  'state',
-  'government',
-  'ministry',
-  'department',
-  'agency',
-  'authority',
-  'federal',
-  'municipal',
-  'council',
-  'commission',
-  'office',
-  'bureau',
-  'congress',
-  'senate',
-  'parliament',
-  'legislature',
-  'executive',
-  'county',
-  'province',
-  'region',
-  'district',
-  'republic',
-  'kingdom',
-];
-
-// Place-related keywords
-const PLACE_KEYWORDS = [
-  'city',
-  'town',
-  'village',
-  'island',
-  'mountain',
-  'river',
-  'lake',
-  'ocean',
-  'sea',
-  'desert',
-  'forest',
-  'park',
-  'bay',
-  'harbor',
-  'port',
-  'capital',
-  'metropolitan',
-  'area',
-  'neighborhood',
-  'suburb',
-];
-
-function classifyInput(input: string): InputType {
+function classifyInputFast(input: string): InputType {
   const in_ = input.trim();
   if (!in_) return 'unknown';
 
-  // URL
   try {
-    const url = new URL(in_);
-    if (url.protocol === 'http:' || url.protocol === 'https:') return 'url';
-  } catch {
-    /* not a URL */
-  }
-
-  // Email
+    const u = new URL(in_);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return 'url';
+  } catch {}
   if (!/\s/.test(in_) && in_.includes('@')) {
-    const parts = in_.split('@');
-    if (parts.length === 2 && parts[0].length > 0 && parts[1].includes('.')) {
-      return 'email';
-    }
+    const p = in_.split('@');
+    if (p.length === 2 && p[0].length > 0 && p[1].includes('.')) return 'email';
   }
-
-  // IPv4
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(in_)) return 'ipv4';
-
-  // IPv6
   if (in_.includes(':') && /^[0-9a-fA-F:]+$/.test(in_)) return 'ipv6';
-
-  // Phone
-  const normalized = in_.replace(/[\s.\-()]/g, '');
-  if (PHONE_RE.test(normalized)) return 'phone';
-
-  // Domain
+  if (PHONE_RE.test(in_.replace(/[\s.\-()]/g, ''))) return 'phone';
   if (DOMAIN_RE.test(in_)) return 'domain';
 
-  // Check for government/place keywords before company
-  const lower = in_.toLowerCase();
-  const words = lower.split(/\s+/);
+  return 'unknown'; // Don't guess — let research determine entity type
+}
 
-  if (words.some((w) => GOV_KEYWORDS.includes(w))) {
-    return 'government';
-  }
-  if (words.some((w) => PLACE_KEYWORDS.includes(w))) {
-    return 'place';
-  }
+// ─── Source Quality ────────────────────────────────────────────────────────────
 
-  // Company (short, letter-starting name)
-  if (COMPANY_RE.test(in_) && words.length <= MAX_COMPANY_WORDS) {
-    return 'company';
-  }
+type SourceQuality = 'very_strong' | 'strong' | 'moderate' | 'weak' | 'unknown';
 
+function classifySourceQuality(domain: string): SourceQuality {
+  const lower = domain.toLowerCase();
+  if (
+    [
+      'gov',
+      'edu',
+      'wikipedia.org',
+      'reuters.com',
+      'apnews.com',
+      'bbc.com',
+      'nature.com',
+      'who.int',
+      'cdc.gov',
+    ].some((d) => lower.includes(d))
+  )
+    return 'very_strong';
+  if (['org', 'ac.uk', 'edu.'].some((d) => lower.includes(d))) return 'strong';
+  if (['com', 'net', 'info', 'co', 'news'].some((d) => lower.includes(d))) return 'moderate';
+  if (lower.includes('blog') || lower.includes('forum') || lower.includes('reddit')) return 'weak';
   return 'unknown';
+}
+
+function sourceQualityLabel(q: SourceQuality): string {
+  const labels: Record<SourceQuality, string> = {
+    very_strong: 'Very strong',
+    strong: 'Strong',
+    moderate: 'Moderate',
+    weak: 'Weak',
+    unknown: 'Unknown',
+  };
+  return labels[q];
 }
 
 // ─── Evidence Builder ──────────────────────────────────────────────────────────
@@ -142,7 +98,6 @@ function classifyInput(input: string): InputType {
 class EvidenceBuilder {
   private evidence: EvidenceItem[] = [];
   private score = 0;
-
   pass(label: string, points: number, note?: string) {
     this.score = clamp(this.score + points);
     this.evidence.push({ label, result: 'pass', points, note });
@@ -170,276 +125,6 @@ function clamp(n: number) {
   return Math.max(0, Math.min(100, n));
 }
 
-// ─── Source Quality ────────────────────────────────────────────────────────────
-
-type SourceQuality = 'very_strong' | 'strong' | 'moderate' | 'weak' | 'unknown';
-
-const HIGH_QUALITY_DOMAINS = [
-  'gov',
-  'edu',
-  'org',
-  'wikipedia.org',
-  'reuters.com',
-  'apnews.com',
-  'bbc.com',
-  'nature.com',
-  'science.org',
-  'who.int',
-  'cdc.gov',
-];
-
-const MODERATE_QUALITY_DOMAINS = ['com', 'net', 'info', 'co', 'news', 'media', 'press'];
-
-function classifySourceQuality(domain: string): SourceQuality {
-  const lower = domain.toLowerCase();
-  if (HIGH_QUALITY_DOMAINS.some((d) => lower.includes(d))) return 'very_strong';
-  if (MODERATE_QUALITY_DOMAINS.some((d) => lower.includes(d))) return 'moderate';
-  if (lower.includes('blog') || lower.includes('forum') || lower.includes('reddit')) return 'weak';
-  return 'unknown';
-}
-
-function sourceQualityLabel(q: SourceQuality): string {
-  switch (q) {
-    case 'very_strong':
-      return 'Very strong';
-    case 'strong':
-      return 'Strong';
-    case 'moderate':
-      return 'Moderate';
-    case 'weak':
-      return 'Weak';
-    default:
-      return 'Unknown';
-  }
-}
-
-// ─── Domain Verification ───────────────────────────────────────────────────────
-
-async function verifyDomain(
-  domain: string,
-): Promise<{ status: string; score: number; evidence: EvidenceItem[]; summary: string }> {
-  const b = new EvidenceBuilder();
-
-  try {
-    const res = await fetch(
-      `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`,
-      {
-        signal: AbortSignal.timeout(3000),
-      },
-    );
-    const data = await res.json();
-    if (data.Answer && data.Answer.length > 0) {
-      b.pass('DNS Resolves', 0);
-    } else {
-      b.fail('DNS Lookup', 0);
-      return {
-        status: 'unreachable',
-        score: 15,
-        evidence: b.getEvidence(),
-        summary: 'Domain does not resolve.',
-      };
-    }
-  } catch {
-    b.fail('DNS Lookup', 0);
-    return {
-      status: 'unreachable',
-      score: 15,
-      evidence: b.getEvidence(),
-      summary: 'Domain does not resolve.',
-    };
-  }
-
-  try {
-    const res = await fetch(`https://${domain}`, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(5000),
-      redirect: 'follow',
-    });
-    b.pass('HTTPS Available', 20);
-    if (res.ok) {
-      b.pass('HTTP Status OK', 20);
-    } else if (res.status >= 400 && res.status < 500) {
-      b.warning('HTTP Client Error', 10);
-    }
-    b.pass('TLS Certificate Present', 20);
-  } catch {
-    try {
-      const res = await fetch(`http://${domain}`, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(5000),
-        redirect: 'follow',
-      });
-      b.pass('HTTP Fallback', 10);
-      if (res.ok) b.pass('HTTP Status OK', 20);
-    } catch {
-      b.warning('Connection failed', 0);
-    }
-  }
-
-  const score = b.getScore();
-  const status = score >= 70 ? 'verified' : score >= 40 ? 'warning' : 'invalid';
-  const summary =
-    score >= 70
-      ? 'Domain resolves, HTTPS available, certificate valid.'
-      : score >= 40
-        ? 'Domain resolves, but verification is inconclusive.'
-        : 'Domain verification failed.';
-
-  return { status, score, evidence: b.getEvidence(), summary };
-}
-
-// ─── URL Verification ──────────────────────────────────────────────────────────
-
-async function verifyURL(
-  url: string,
-): Promise<{ status: string; score: number; evidence: EvidenceItem[]; summary: string }> {
-  const b = new EvidenceBuilder();
-  try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(5000),
-      redirect: 'follow',
-    });
-    b.pass('URL Reachable', 30);
-    if (url.startsWith('https://')) b.pass('HTTPS Protocol', 20);
-    if (res.ok) b.pass('HTTP Status OK', 20);
-  } catch {
-    b.fail('URL Unreachable', 0);
-    return {
-      status: 'unreachable',
-      score: 10,
-      evidence: b.getEvidence(),
-      summary: 'URL could not be reached.',
-    };
-  }
-  const score = b.getScore();
-  return {
-    status: score >= 50 ? 'verified' : 'warning',
-    score,
-    evidence: b.getEvidence(),
-    summary: 'URL verification complete.',
-  };
-}
-
-// ─── Email Verification ────────────────────────────────────────────────────────
-
-async function verifyEmail(
-  email: string,
-): Promise<{ status: string; score: number; evidence: EvidenceItem[]; summary: string }> {
-  const b = new EvidenceBuilder();
-  const domain = email.split('@')[1];
-  try {
-    const res = await fetch(
-      `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`,
-      { signal: AbortSignal.timeout(3000) },
-    );
-    const data = await res.json();
-    if (data.Answer && data.Answer.length > 0) {
-      b.pass('MX Records Found', 40);
-    } else {
-      b.fail('No MX Records', -20);
-    }
-  } catch {
-    b.warning('MX lookup failed', 0);
-  }
-  const score = b.getScore();
-  return {
-    status: score >= 50 ? 'verified' : 'warning',
-    score,
-    evidence: b.getEvidence(),
-    summary: 'Email verification complete.',
-  };
-}
-
-// ─── IP Verification ───────────────────────────────────────────────────────────
-
-function verifyIP(ip: string): {
-  status: string;
-  score: number;
-  evidence: EvidenceItem[];
-  summary: string;
-} {
-  const b = new EvidenceBuilder();
-  const parts = ip.split('.').map(Number);
-  if (ip === '127.0.0.1' || ip === '::1') {
-    b.pass('Loopback Address', 100);
-    return {
-      status: 'local',
-      score: 100,
-      evidence: b.getEvidence(),
-      summary: 'Local/loopback address.',
-    };
-  }
-  if (
-    parts[0] === 10 ||
-    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-    (parts[0] === 192 && parts[1] === 168)
-  ) {
-    b.pass('Private IP Range', 90);
-    return {
-      status: 'private',
-      score: 90,
-      evidence: b.getEvidence(),
-      summary: 'Private/internal IP address.',
-    };
-  }
-  b.pass('Public IP', 70);
-  return {
-    status: 'verified',
-    score: 70,
-    evidence: b.getEvidence(),
-    summary: 'Public IP address.',
-  };
-}
-
-// ─── Phone Verification ────────────────────────────────────────────────────────
-
-function verifyPhone(phone: string): {
-  status: string;
-  score: number;
-  evidence: EvidenceItem[];
-  summary: string;
-} {
-  const b = new EvidenceBuilder();
-  const normalized = phone.replace(/[\s.\-()]/g, '');
-  if (/^\+\d{6,15}$/.test(normalized)) {
-    b.pass('Valid E.164 Format', 60);
-    return {
-      status: 'verified',
-      score: 60,
-      evidence: b.getEvidence(),
-      summary: 'Phone number format is valid.',
-    };
-  }
-  return {
-    status: 'warning',
-    score: 30,
-    evidence: b.getEvidence(),
-    summary: 'Phone number format could not be validated.',
-  };
-}
-
-// ─── Company Verification ──────────────────────────────────────────────────────
-
-function verifyCompany(name: string): {
-  status: string;
-  score: number;
-  evidence: EvidenceItem[];
-  summary: string;
-} {
-  const b = new EvidenceBuilder();
-  b.pass('Name Format Valid', 40);
-  if (/\b(Inc|LLC|Corp|Ltd|Co)\b/i.test(name)) {
-    b.pass('Business Suffix Present', 10);
-  }
-  return {
-    status: 'warning',
-    score: b.getScore(),
-    evidence: b.getEvidence(),
-    summary: 'Company name format validated. Additional verification recommended.',
-  };
-}
-
 // ─── Research (DuckDuckGo + Wikipedia) ─────────────────────────────────────────
 
 interface SearchResult {
@@ -461,18 +146,14 @@ interface DuckDuckGoResponse {
   Heading: string;
   Image: string;
   Type: string;
-  RelatedTopics: Array<{
-    Text?: string;
-    FirstURL?: string;
-    Result?: string;
-  }>;
+  RelatedTopics: Array<{ Text?: string; FirstURL?: string; Result?: string }>;
 }
 
 async function searchDuckDuckGo(query: string): Promise<SearchResult[]> {
   try {
     const res = await fetch(
-      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
-      { signal: AbortSignal.timeout(3000) },
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`,
+      { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) },
     );
     const data: DuckDuckGoResponse = await res.json();
     const results: SearchResult[] = [];
@@ -517,13 +198,12 @@ async function searchWikipedia(query: string): Promise<SearchResult[]> {
     const searchRes = await fetch(
       `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=3&format=json`,
       {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
         headers: { 'User-Agent': 'TrustCheck/1.0 (fact-checking tool)' },
       },
     );
     const data = await searchRes.json();
     const results: SearchResult[] = [];
-
     if (data.query?.search) {
       for (const item of data.query.search) {
         results.push({
@@ -544,11 +224,13 @@ async function searchWikipedia(query: string): Promise<SearchResult[]> {
 interface ResearchResults {
   supporting: SearchResult[];
   contradicting: SearchResult[];
+  allResults: SearchResult[];
   entityDescription: string;
   entityType: string;
   entityCountry?: string;
   entityRegion?: string;
   disambiguation?: string[];
+  searchErrors: string[];
 }
 
 async function researchClaim(claim: string): Promise<ResearchResults> {
@@ -561,6 +243,10 @@ async function researchClaim(claim: string): Promise<ResearchResults> {
     ...(ddgResults.status === 'fulfilled' ? ddgResults.value : []),
     ...(wikiResults.status === 'fulfilled' ? wikiResults.value : []),
   ];
+
+  const searchErrors: string[] = [];
+  if (ddgResults.status === 'rejected') searchErrors.push(`DuckDuckGo: ${ddgResults.reason}`);
+  if (wikiResults.status === 'rejected') searchErrors.push(`Wikipedia: ${wikiResults.reason}`);
 
   // Extract entity description from DuckDuckGo
   let entityDescription = '';
@@ -580,7 +266,6 @@ async function researchClaim(claim: string): Promise<ResearchResults> {
     /(?:in|of|from|located in|situated in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g,
     /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:State|Province|Region|County|District)/g,
   ];
-
   for (const pattern of locationPatterns) {
     const match = pattern.exec(entityDescription);
     if (match) {
@@ -599,47 +284,133 @@ async function researchClaim(claim: string): Promise<ResearchResults> {
     'wrong',
     'incorrect',
   ];
-  const supportingKeywords = [
-    'confirmed',
-    'supports',
-    'proves',
-    'true',
-    'accurate',
-    'verified',
-    'is a',
-    'is an',
-  ];
-
   const supporting: SearchResult[] = [];
   const contradicting: SearchResult[] = [];
 
   for (const r of allResults) {
     const text = (r.title + ' ' + r.snippet).toLowerCase();
-    const hasContradict = contradictKeywords.some((k) => text.includes(k));
-    const hasSupport = supportingKeywords.some((k) => text.includes(k));
-
-    if (hasContradict) {
+    if (contradictKeywords.some((k) => text.includes(k))) {
       contradicting.push(r);
     } else {
       supporting.push(r);
     }
   }
 
-  // Generate disambiguation if the query is ambiguous
-  if (claim.toLowerCase() === 'lagos') {
-    disambiguation.push('Lagos State, Nigeria');
-    disambiguation.push('Lagos metropolitan area');
+  // Detect disambiguation from DuckDuckGo related topics
+  if (ddgData.length > 0) {
+    const relatedTitles = ddgData
+      .slice(1)
+      .map((r) => r.title)
+      .filter((t) => t && t !== claim);
+    if (relatedTitles.length > 0) {
+      disambiguation.push(...relatedTitles.slice(0, 3));
+    }
   }
 
   return {
     supporting,
     contradicting,
+    allResults,
     entityDescription,
     entityType,
     entityCountry,
     entityRegion,
     disambiguation: disambiguation.length > 0 ? disambiguation : undefined,
+    searchErrors,
   };
+}
+
+// ─── Entity Type Resolution (research-first) ──────────────────────────────────
+
+function resolveEntityType(
+  input: string,
+  fastType: InputType,
+  research: ResearchResults,
+): InputType {
+  // For technical inputs, trust the fast classifier
+  if (['url', 'email', 'ipv4', 'ipv6', 'phone', 'domain'].includes(fastType)) {
+    return fastType;
+  }
+
+  // For text inputs, use research results to determine entity type
+  const ddgType = (research.entityType || '').toLowerCase();
+  const desc = research.entityDescription.toLowerCase();
+  const allText = research.allResults
+    .map((r) => r.title + ' ' + r.snippet)
+    .join(' ')
+    .toLowerCase();
+
+  // Government/entity detection from DuckDuckGo Type
+  if (
+    ddgType.includes('state') ||
+    ddgType.includes('province') ||
+    ddgType.includes('region') ||
+    ddgType.includes('country') ||
+    ddgType.includes('republic') ||
+    ddgType.includes('kingdom')
+  ) {
+    return 'government';
+  }
+  if (
+    ddgType.includes('city') ||
+    ddgType.includes('town') ||
+    ddgType.includes('village') ||
+    ddgType.includes('island') ||
+    ddgType.includes('mountain') ||
+    ddgType.includes('river')
+  ) {
+    return 'place';
+  }
+  if (
+    ddgType.includes('company') ||
+    ddgType.includes('business') ||
+    ddgType.includes('corporation')
+  ) {
+    return 'company';
+  }
+  if (ddgType.includes('person') || ddgType.includes('people')) {
+    return 'person';
+  }
+  if (
+    ddgType.includes('organization') ||
+    ddgType.includes('institution') ||
+    ddgType.includes('agency')
+  ) {
+    return 'organization';
+  }
+
+  // Fallback: analyze description content
+  if (
+    desc.includes('state of') ||
+    desc.includes('province of') ||
+    desc.includes('region of') ||
+    desc.includes('government') ||
+    desc.includes('administrative')
+  ) {
+    return 'government';
+  }
+  if (desc.includes('city') || desc.includes('town') || desc.includes('metropolitan')) {
+    return 'place';
+  }
+  if (desc.includes('company') || desc.includes('corporation') || desc.includes('incorporated')) {
+    return 'company';
+  }
+
+  // Check all research results for type signals
+  if (
+    allText.includes('state') &&
+    (allText.includes('nigeria') || allText.includes('government'))
+  ) {
+    return 'government';
+  }
+
+  // If we have a description but can't determine type, use research-backed guess
+  if (research.entityDescription) {
+    // Has description = likely a known entity, not a random company
+    return 'organization';
+  }
+
+  return fastType === 'unknown' ? 'unknown' : fastType;
 }
 
 // ─── Entity Identity Builder ───────────────────────────────────────────────────
@@ -657,12 +428,12 @@ interface EntityIdentity {
 
 function buildEntityIdentity(
   input: string,
-  inputType: InputType,
+  resolvedType: InputType,
   research: ResearchResults,
 ): EntityIdentity {
   const identity: EntityIdentity = {
     canonicalName: input,
-    entityType: inputType,
+    entityType: resolvedType,
     description:
       research.entityDescription ||
       `The searched term "${input}" could not be fully identified from available evidence.`,
@@ -670,55 +441,236 @@ function buildEntityIdentity(
     aliases: [],
   };
 
-  // Enhance entity type based on research
-  if (research.entityType) {
-    const t = research.entityType.toLowerCase();
-    if (t.includes('state') || t.includes('province') || t.includes('region')) {
-      identity.entityType = 'government';
-    } else if (t.includes('city') || t.includes('town') || t.includes('village')) {
-      identity.entityType = 'place';
-    } else if (t.includes('company') || t.includes('business')) {
-      identity.entityType = 'company';
-    } else if (t.includes('person')) {
-      identity.entityType = 'person';
-    } else if (t.includes('organization') || t.includes('institution')) {
-      identity.entityType = 'organization';
-    }
+  if (research.entityCountry) identity.country = research.entityCountry;
+  if (research.entityRegion) identity.region = research.entityRegion;
+  if (research.disambiguation) {
+    identity.possibleAlternatives = research.disambiguation.filter(
+      (d) => d.toLowerCase() !== input.toLowerCase(),
+    );
   }
 
-  // Set location from research
-  if (research.entityCountry) {
-    identity.country = research.entityCountry;
-  }
-  if (research.entityRegion) {
-    identity.region = research.entityRegion;
-  }
-
-  // Set disambiguation
-  if (research.disambiguation && research.disambiguation.length > 0) {
-    identity.possibleAlternatives = research.disambiguation.filter((d) => d !== input);
-  }
-
-  // Increase confidence if we have strong evidence
-  if (research.supporting.length >= 2) {
-    identity.identityConfidence = 'high';
-  } else if (research.supporting.length === 1) {
-    identity.identityConfidence = 'medium';
-  }
+  if (research.supporting.length >= 2) identity.identityConfidence = 'high';
+  else if (research.supporting.length === 1) identity.identityConfidence = 'medium';
 
   return identity;
 }
 
-// ─── Analysis Pipeline ─────────────────────────────────────────────────────────
+// ─── Verification Functions ────────────────────────────────────────────────────
 
-function generateInterpretations(
-  input: string,
-  inputType: InputType,
-  score: number,
-  identity: EntityIdentity,
-) {
+async function verifyDomain(domain: string) {
+  const b = new EvidenceBuilder();
+  try {
+    const res = await fetch(
+      `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`,
+      { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) },
+    );
+    const data = await res.json();
+    if (data.Answer && data.Answer.length > 0) b.pass('DNS Resolves', 0);
+    else {
+      b.fail('DNS Lookup', 0);
+      return {
+        status: 'unreachable',
+        score: 15,
+        evidence: b.getEvidence(),
+        summary: 'Domain does not resolve.',
+      };
+    }
+  } catch {
+    b.fail('DNS Lookup', 0);
+    return {
+      status: 'unreachable',
+      score: 15,
+      evidence: b.getEvidence(),
+      summary: 'Domain does not resolve.',
+    };
+  }
+
+  try {
+    const res = await fetch(`https://${domain}`, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000),
+      redirect: 'follow',
+    });
+    b.pass('HTTPS Available', 20);
+    if (res.ok) b.pass('HTTP Status OK', 20);
+    else if (res.status >= 400 && res.status < 500) b.warning('HTTP Client Error', 10);
+    b.pass('TLS Certificate Present', 20);
+  } catch {
+    try {
+      const res = await fetch(`http://${domain}`, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(5000),
+        redirect: 'follow',
+      });
+      b.pass('HTTP Fallback', 10);
+      if (res.ok) b.pass('HTTP Status OK', 20);
+    } catch {
+      b.warning('Connection failed', 0);
+    }
+  }
+
+  const score = b.getScore();
+  return {
+    status: score >= 70 ? 'verified' : score >= 40 ? 'warning' : 'invalid',
+    score,
+    evidence: b.getEvidence(),
+    summary:
+      score >= 70
+        ? 'Domain resolves, HTTPS available, certificate valid.'
+        : score >= 40
+          ? 'Domain resolves, but verification is inconclusive.'
+          : 'Domain verification failed.',
+  };
+}
+
+async function verifyURL(url: string) {
+  const b = new EvidenceBuilder();
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000),
+      redirect: 'follow',
+    });
+    b.pass('URL Reachable', 30);
+    if (url.startsWith('https://')) b.pass('HTTPS Protocol', 20);
+    if (res.ok) b.pass('HTTP Status OK', 20);
+  } catch {
+    b.fail('URL Unreachable', 0);
+    return {
+      status: 'unreachable',
+      score: 10,
+      evidence: b.getEvidence(),
+      summary: 'URL could not be reached.',
+    };
+  }
+  const score = b.getScore();
+  return {
+    status: score >= 50 ? 'verified' : 'warning',
+    score,
+    evidence: b.getEvidence(),
+    summary: 'URL verification complete.',
+  };
+}
+
+async function verifyEmail(email: string) {
+  const b = new EvidenceBuilder();
+  const domain = email.split('@')[1];
+  try {
+    const res = await fetch(
+      `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`,
+      { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) },
+    );
+    const data = await res.json();
+    if (data.Answer && data.Answer.length > 0) b.pass('MX Records Found', 40);
+    else b.fail('No MX Records', -20);
+  } catch {
+    b.warning('MX lookup failed', 0);
+  }
+  const score = b.getScore();
+  return {
+    status: score >= 50 ? 'verified' : 'warning',
+    score,
+    evidence: b.getEvidence(),
+    summary: 'Email verification complete.',
+  };
+}
+
+function verifyIP(ip: string) {
+  const b = new EvidenceBuilder();
+  const parts = ip.split('.').map(Number);
+  if (ip === '127.0.0.1' || ip === '::1') {
+    b.pass('Loopback Address', 100);
+    return {
+      status: 'local',
+      score: 100,
+      evidence: b.getEvidence(),
+      summary: 'Local/loopback address.',
+    };
+  }
+  if (
+    parts[0] === 10 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168)
+  ) {
+    b.pass('Private IP Range', 90);
+    return {
+      status: 'private',
+      score: 90,
+      evidence: b.getEvidence(),
+      summary: 'Private/internal IP address.',
+    };
+  }
+  b.pass('Public IP', 70);
+  return {
+    status: 'verified',
+    score: 70,
+    evidence: b.getEvidence(),
+    summary: 'Public IP address.',
+  };
+}
+
+function verifyPhone(phone: string) {
+  const b = new EvidenceBuilder();
+  if (/^\+\d{6,15}$/.test(phone.replace(/[\s.\-()]/g, ''))) {
+    b.pass('Valid E.164 Format', 60);
+    return {
+      status: 'verified',
+      score: 60,
+      evidence: b.getEvidence(),
+      summary: 'Phone number format is valid.',
+    };
+  }
+  return {
+    status: 'warning',
+    score: 30,
+    evidence: b.getEvidence(),
+    summary: 'Phone number format could not be validated.',
+  };
+}
+
+function verifyEntity(resolvedType: InputType, research: ResearchResults) {
+  const b = new EvidenceBuilder();
+
+  // Evidence from research
+  for (const r of research.supporting) {
+    const quality = classifySourceQuality(r.domain);
+    const points =
+      quality === 'very_strong' ? 15 : quality === 'strong' ? 10 : quality === 'moderate' ? 5 : 2;
+    b.pass(
+      `Source: ${r.domain}`,
+      points,
+      `${r.title} (${sourceQualityLabel(quality)}) — ${r.snippet.slice(0, 120)}`,
+    );
+  }
+  for (const r of research.contradicting) {
+    b.warning(`Source: ${r.domain}`, -5, `${r.title} — ${r.snippet.slice(0, 120)}`);
+  }
+
+  // Entity-specific checks
+  if (resolvedType === 'government' || resolvedType === 'place') {
+    if (research.entityCountry)
+      b.pass('Location identified', 10, `Identified as being in ${research.entityCountry}`);
+  }
+  if (resolvedType === 'company') {
+    b.pass('Entity identified', 5, 'Research confirms this is a recognized entity');
+  }
+
+  const score = b.getScore();
+  return {
+    status: score >= 70 ? 'verified' : score >= 40 ? 'warning' : 'invalid',
+    score,
+    evidence: b.getEvidence(),
+    summary:
+      research.supporting.length > 0
+        ? `Found ${research.supporting.length} supporting source(s)${research.contradicting.length > 0 ? ` and ${research.contradicting.length} contradicting source(s)` : ''}.`
+        : 'No evidence found for this entity.',
+  };
+}
+
+// ─── Analysis Generators ───────────────────────────────────────────────────────
+
+function generateInterpretations(input: string, score: number, identity: EntityIdentity) {
   const interpretations = [];
-
   if (identity.identityConfidence === 'high') {
     interpretations.push({
       title: 'Strong identification',
@@ -744,7 +696,6 @@ function generateInterpretations(
       supportingEvidenceCount: 1,
     });
   }
-
   if (identity.possibleAlternatives && identity.possibleAlternatives.length > 0) {
     interpretations.push({
       title: 'Possible alternative',
@@ -754,48 +705,28 @@ function generateInterpretations(
       supportingEvidenceCount: 0,
     });
   }
-
   return interpretations;
 }
 
-function generateWarningSignals(
-  input: string,
-  inputType: InputType,
-  score: number,
-  identity: EntityIdentity,
-) {
+function generateWarningSignals(input: string, score: number, identity: EntityIdentity) {
   const signals = [];
-
-  if (score < 40) {
+  if (score < 40)
     signals.push({
       label: 'Low trust score',
       severity: 'high' as const,
       description: 'The verification score is low, indicating potential risk.',
     });
-  }
-
-  if (identity.possibleAlternatives && identity.possibleAlternatives.length > 0) {
+  if (identity.possibleAlternatives && identity.possibleAlternatives.length > 0)
     signals.push({
       label: 'Ambiguous entity',
       severity: 'medium' as const,
-      description: `The search term "${input}" could refer to multiple entities. ${identity.possibleAlternatives.length} alternative(s) identified.`,
+      description: `The search term "${input}" could refer to multiple entities.`,
     });
-  }
-
-  if (inputType === 'unknown') {
-    signals.push({
-      label: 'Unverifiable input',
-      severity: 'medium' as const,
-      description: 'The input could not be classified into a standard verification type.',
-    });
-  }
-
   return signals;
 }
 
-function generateRecommendations(inputType: InputType, _score: number, identity: EntityIdentity) {
+function generateRecommendations(resolvedType: InputType, identity: EntityIdentity) {
   const recs = [];
-
   if (identity.entityType === 'government' || identity.entityType === 'place') {
     recs.push({
       title: 'Verify official sources',
@@ -805,32 +736,15 @@ function generateRecommendations(inputType: InputType, _score: number, identity:
       title: 'Cross-reference with authoritative databases',
       description: 'Consult official geographic or administrative databases.',
     });
-  } else if (inputType === 'domain') {
+  } else if (resolvedType === 'domain') {
     recs.push({
       title: 'Check WHOIS registration',
       description: 'Verify the domain owner and registration date.',
     });
-    recs.push({
-      title: 'Run a link scanner',
-      description: 'Check for malware or phishing indicators.',
-    });
-  } else if (inputType === 'email') {
+  } else if (resolvedType === 'email') {
     recs.push({
       title: 'Verify sender identity',
       description: 'Contact the sender through a known channel.',
-    });
-    recs.push({
-      title: 'Check for phishing indicators',
-      description: 'Look for suspicious links or requests.',
-    });
-  } else if (inputType === 'unknown') {
-    recs.push({
-      title: 'Cross-reference sources',
-      description: 'Verify the claim through multiple independent sources.',
-    });
-    recs.push({
-      title: 'Check fact-checking sites',
-      description: 'Search established fact-checking organizations.',
     });
   } else {
     recs.push({
@@ -838,7 +752,6 @@ function generateRecommendations(inputType: InputType, _score: number, identity:
       description: 'Cross-check this information with authoritative sources.',
     });
   }
-
   return recs;
 }
 
@@ -846,29 +759,20 @@ function generateReasoning(score: number, evidence: EvidenceItem[], identity: En
   const bullets = [
     `Trust score of ${score} out of 100 reflects the checks that could be run against the input.`,
   ];
-
-  if (identity.entityType !== 'unknown') {
+  if (identity.entityType !== 'unknown')
     bullets.push(`Entity identified as: ${identity.entityType}`);
-  }
-  if (identity.country) {
-    bullets.push(`Location: ${identity.country}`);
-  }
-
+  if (identity.country) bullets.push(`Location: ${identity.country}`);
   for (const e of evidence) {
     if (e.result === 'pass') bullets.push(`+ ${e.label}`);
     else if (e.result === 'fail') bullets.push(`- ${e.label}`);
   }
-
-  if (!evidence.some((e) => e.result === 'fail')) {
+  if (!evidence.some((e) => e.result === 'fail'))
     bullets.push('No contradicting evidence was found.');
-  }
-
   return bullets;
 }
 
 function generateTimeline(
   input: string,
-  inputType: InputType,
   evidence: EvidenceItem[],
   score: number,
   identity: EntityIdentity,
@@ -880,10 +784,8 @@ function generateTimeline(
       details: [`Entity type: ${identity.entityType}`, `Input: ${input}`],
     },
   ];
-
   const passCount = evidence.filter((e) => e.result === 'pass').length;
   const failCount = evidence.filter((e) => e.result === 'fail').length;
-
   steps.push({
     title: 'Evidence Gathered',
     summary: `${passCount} supporting, ${failCount} contradicting`,
@@ -891,7 +793,6 @@ function generateTimeline(
       (e) => `${e.result === 'pass' ? '+' : e.result === 'fail' ? '-' : '~'} ${e.label}`,
     ),
   });
-
   steps.push({
     title: 'Conflicts Identified',
     summary: failCount > 0 ? `${failCount} issues found` : 'No conflicts',
@@ -912,11 +813,8 @@ function generateTimeline(
     summary: `Score: ${score}/100`,
     details: [`Trust score: ${score}`, `Evidence items: ${evidence.length}`],
   });
-
   return steps;
 }
-
-// ─── Final Assessment Generator ────────────────────────────────────────────────
 
 function generateFinalAssessment(
   score: number,
@@ -924,38 +822,36 @@ function generateFinalAssessment(
   evidence: EvidenceItem[],
   identity: EntityIdentity,
   research: ResearchResults,
-): string {
+) {
   const parts: string[] = [];
-
-  // What was verified
   parts.push(
     `TrustCheck verified "${identity.canonicalName}" and identified it as ${identity.entityType === 'unknown' ? 'an entity' : `a ${identity.entityType}`}.`,
   );
 
-  // Confidence level
-  if (identity.identityConfidence === 'high') {
+  if (identity.identityConfidence === 'high')
     parts.push(
       'The entity identification has high confidence based on multiple corroborating sources.',
     );
-  } else if (identity.identityConfidence === 'medium') {
+  else if (identity.identityConfidence === 'medium')
     parts.push('The entity identification has moderate confidence. Some ambiguity may remain.');
-  } else {
+  else
     parts.push('The entity identification has low confidence due to limited available evidence.');
-  }
 
-  // What remains uncertain
   if (identity.possibleAlternatives && identity.possibleAlternatives.length > 0) {
     parts.push(
       `The search term is ambiguous and could also refer to: ${identity.possibleAlternatives.join(', ')}.`,
     );
   }
 
-  // Contradicting evidence
-  if (research.contradicting.length > 0) {
+  if (research.contradicting.length > 0)
     parts.push(
       'Some contradicting evidence was found, which may indicate conflicting information.',
     );
-  }
+
+  if (research.searchErrors.length > 0)
+    parts.push(
+      `Note: Some research sources were unavailable (${research.searchErrors.length} provider(s) failed).`,
+    );
 
   return parts.join(' ');
 }
@@ -963,6 +859,8 @@ function generateFinalAssessment(
 // ─── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+
   try {
     const body = await request.json();
     const input = body.input;
@@ -973,12 +871,50 @@ export async function POST(request: NextRequest) {
     }
 
     const trimmed = input.trim();
-    const inputType = classifyInput(trimmed);
 
-    // Run verification based on type
+    // Step 1: Fast classification (for technical inputs only)
+    const fastType = classifyInputFast(trimmed);
+
+    // Step 2: Research (happens BEFORE entity type resolution)
+    let research: ResearchResults = {
+      supporting: [],
+      contradicting: [],
+      allResults: [],
+      entityDescription: '',
+      entityType: 'unknown',
+      searchErrors: [],
+    };
+    if (!['url', 'email', 'ipv4', 'ipv6', 'phone'].includes(fastType)) {
+      research = await researchClaim(trimmed);
+    }
+
+    // Check if we've exceeded timeout
+    if (Date.now() - startTime > REQUEST_TIMEOUT_MS) {
+      return NextResponse.json({
+        input: trimmed,
+        type: 'unknown',
+        status: 'timeout',
+        trustScore: 0,
+        summary: 'Research timed out. Partial results may be available.',
+        evidence: [],
+        verdict: 'Low' as Verdict,
+        entityIdentity: {
+          canonicalName: trimmed,
+          entityType: 'unknown',
+          description: 'Research timed out before entity could be identified.',
+          identityConfidence: 'low' as const,
+          aliases: [],
+        },
+      });
+    }
+
+    // Step 3: Resolve entity type based on research
+    const resolvedType = resolveEntityType(trimmed, fastType, research);
+
+    // Step 4: Run verification based on resolved type
     let verification: { status: string; score: number; evidence: EvidenceItem[]; summary: string };
 
-    switch (inputType) {
+    switch (resolvedType) {
       case 'domain':
         verification = await verifyDomain(trimmed);
         break;
@@ -995,144 +931,65 @@ export async function POST(request: NextRequest) {
       case 'phone':
         verification = verifyPhone(trimmed);
         break;
-      case 'company':
-      case 'government':
-      case 'place':
-      case 'organization':
-        verification = verifyCompany(trimmed);
+      default:
+        verification = verifyEntity(resolvedType, research);
         break;
-      default: {
-        // For unknown text, run research
-        const research = await researchClaim(trimmed);
-        const evidence: EvidenceItem[] = [];
-
-        for (const r of research.supporting) {
-          const quality = classifySourceQuality(r.domain);
-          evidence.push({
-            label: `Web search: ${r.domain}`,
-            result: 'info',
-            points: quality === 'very_strong' ? 15 : quality === 'strong' ? 10 : 5,
-            note: `${r.title} - ${r.snippet.slice(0, 150)}`,
-          });
-        }
-        for (const r of research.contradicting) {
-          evidence.push({
-            label: `Web search: ${r.domain}`,
-            result: 'warning',
-            points: -5,
-            note: `${r.title} - ${r.snippet.slice(0, 150)}`,
-          });
-        }
-
-        const supportCount = research.supporting.length;
-        const contradictCount = research.contradicting.length;
-        const researchScore =
-          supportCount > contradictCount
-            ? clamp(50 + Math.min((supportCount - contradictCount) * 10, 40))
-            : contradictCount > supportCount
-              ? clamp(50 - Math.min((contradictCount - supportCount) * 10, 40))
-              : 50;
-
-        verification = {
-          status: researchScore >= 70 ? 'verified' : researchScore >= 40 ? 'warning' : 'invalid',
-          score: researchScore,
-          evidence,
-          summary:
-            evidence.length > 0
-              ? `Found ${supportCount} supporting and ${contradictCount} contradicting sources.`
-              : 'No evidence found for this claim.',
-        };
-        break;
-      }
     }
 
-    // Build full response
+    // Step 5: Build entity identity
+    const entityIdentity = buildEntityIdentity(trimmed, resolvedType, research);
+
+    // Step 6: Build response
     const score = verification.score;
     const verdict: Verdict = score >= 70 ? 'High' : score >= 40 ? 'Medium' : 'Low';
     const evidence = verification.evidence;
 
-    // Research for text claims (already done in default case above, but we need it for entity identity)
-    let research: ResearchResults = {
-      supporting: [],
-      contradicting: [],
-      entityDescription: '',
-      entityType: 'unknown',
-    };
-    if (
-      inputType === 'unknown' ||
-      inputType === 'government' ||
-      inputType === 'place' ||
-      inputType === 'company' ||
-      inputType === 'organization'
-    ) {
-      research = await researchClaim(trimmed);
-    }
-
-    // Build entity identity
-    const entityIdentity = buildEntityIdentity(trimmed, inputType, research);
-
-    // Extract entities for text claims
-    const entities =
-      inputType === 'unknown'
-        ? trimmed
-            .split(/\s+/)
-            .filter(
-              (w) =>
-                w.length > 3 &&
-                !['this', 'that', 'with', 'from', 'have', 'been', 'were', 'they', 'their'].includes(
-                  w.toLowerCase(),
-                ),
-            )
-            .slice(0, 5)
-            .map((name) => ({ name, kind: 'organization' as Entity['kind'] }))
-        : [
-            {
-              name: trimmed,
-              kind: (inputType === 'email'
-                ? 'person'
-                : inputType === 'government' || inputType === 'place'
-                  ? 'location'
-                  : 'organization') as Entity['kind'],
-            },
-          ];
-
+    const entities = [
+      {
+        name: trimmed,
+        kind: (resolvedType === 'email'
+          ? 'person'
+          : resolvedType === 'government' || resolvedType === 'place'
+            ? 'location'
+            : 'organization') as Entity['kind'],
+      },
+    ];
     const keywords = trimmed
       .toLowerCase()
       .split(/\s+/)
       .filter((w) => w.length > 3)
       .slice(0, 10);
 
-    // Build enhanced response
     const response: VerifyResponse = {
       input: trimmed,
-      type: inputType,
+      type: resolvedType,
       status: verification.status,
       trustScore: score,
       summary: verification.summary,
       evidence,
       verdict,
-      keyClaim: `The claim under review is that ${inputType === 'unknown' ? `"${trimmed}"` : `the ${inputType} "${trimmed}"`} is trustworthy.`,
+      keyClaim: `The claim under review is that ${resolvedType === 'unknown' ? `"${trimmed}"` : `the ${resolvedType} "${trimmed}"`} is trustworthy.`,
       entities,
       keywords,
       evidenceFor: evidence.filter((e) => e.result === 'pass'),
       evidenceAgainst: evidence.filter((e) => e.result === 'fail' || e.result === 'warning'),
       missingEvidence:
-        inputType === 'unknown'
+        resolvedType === 'unknown'
           ? ['Not verified: original source.', 'Not verified: independent corroboration.']
-          : [`Not verified: additional ${inputType} checks.`],
+          : [`Not verified: additional ${resolvedType} checks.`],
       unknownInformation:
-        inputType === 'unknown'
+        resolvedType === 'unknown'
           ? [
               'The author of this content is unknown.',
               'The publication date and provenance are unknown.',
             ]
           : ['The real-world usage of this identifier is unknown.'],
-      interpretations: generateInterpretations(trimmed, inputType, score, entityIdentity),
-      warningSignals: generateWarningSignals(trimmed, inputType, score, entityIdentity),
+      interpretations: generateInterpretations(trimmed, score, entityIdentity),
+      warningSignals: generateWarningSignals(trimmed, score, entityIdentity),
       confidence: clamp(score + 10),
       reasoning: generateReasoning(score, evidence, entityIdentity),
-      timeline: generateTimeline(trimmed, inputType, evidence, score, entityIdentity),
-      recommendations: generateRecommendations(inputType, score, entityIdentity),
+      timeline: generateTimeline(trimmed, evidence, score, entityIdentity),
+      recommendations: generateRecommendations(resolvedType, entityIdentity),
       supportingEvidence:
         evidence.filter((e) => e.result === 'pass').length > 0
           ? [
@@ -1191,14 +1048,14 @@ export async function POST(request: NextRequest) {
           },
           {
             name: 'Input Specificity',
-            score: inputType === 'unknown' ? 40 : 70,
-            note: inputType === 'unknown' ? 'Free-form text' : `Classified as ${inputType}`,
+            score: resolvedType === 'unknown' ? 40 : 70,
+            note: resolvedType === 'unknown' ? 'Free-form text' : `Classified as ${resolvedType}`,
           },
         ],
       },
       aiSummary: generateFinalAssessment(score, verdict, evidence, entityIdentity, research),
       suggestedReading:
-        inputType === 'unknown'
+        resolvedType === 'unknown'
           ? [
               {
                 title: 'How to evaluate claims',
@@ -1208,9 +1065,9 @@ export async function POST(request: NextRequest) {
             ]
           : [
               {
-                title: `How to verify ${inputType}s`,
+                title: `How to verify ${resolvedType}s`,
                 publisher: 'General',
-                whyItHelps: `Best practices for verifying ${inputType} information.`,
+                whyItHelps: `Best practices for verifying ${resolvedType} information.`,
               },
             ],
       suggestedReadingNote: 'General guidance for verification.',
@@ -1236,8 +1093,8 @@ export async function POST(request: NextRequest) {
               confidenceInContradiction: 50,
             })),
           summary: verification.summary,
-          timeline: generateTimeline(trimmed, inputType, evidence, score, entityIdentity),
-          recommendations: generateRecommendations(inputType, score, entityIdentity),
+          timeline: generateTimeline(trimmed, evidence, score, entityIdentity),
+          recommendations: generateRecommendations(resolvedType, entityIdentity),
           missingInformation: [
             {
               item: 'Additional verification',
@@ -1319,7 +1176,6 @@ export async function POST(request: NextRequest) {
         confidence: 50,
         relevance: 60,
       })),
-      // Enhanced entity identification fields (backward compatible - optional)
       entityIdentity: {
         canonicalName: entityIdentity.canonicalName,
         entityType: entityIdentity.entityType,
