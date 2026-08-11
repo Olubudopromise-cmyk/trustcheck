@@ -3,38 +3,19 @@
 # The repository is a pnpm/Turbo monorepo. The base directory is the
 # repository root, so every path below is absolute relative to that root.
 # Netlify installs dependencies at the root (pnpm is detected via
-# pnpm-lock.yaml) and runs the build command; only the web app is built by
-# the site build. The Go API is compiled by Netlify as a Function from
-# apps/api/function into netlify/functions/api and served at /api on the same origin.
+# pnpm-lock.yaml) and runs the build command; the web app is built by
+# the site build. The API is served by Next.js API routes at /api/*.
 
 [build]
-  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build && mkdir -p netlify/functions && cd apps/api && go build -o '../../netlify/functions/api' ./function/api.go"
+  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter @trustcheck/web build"
   publish = "apps/web/.next"
 
 [build.environment]
   # Force pnpm so the workspace install never falls back to npm in CI.
   NETLIFY_USE_PNPM = "true"
   NODE_VERSION = "22"
-  # Must be >= the `go` directive in apps/api/go.mod (1.23.0).
-  GO_VERSION = "1.23.3"
-
-[functions]
-  # The Go Function binary is built into netlify/functions so Netlify packages it as a pre-compiled Go binary.
-  directory = "netlify/functions"
 
 [[plugins]]
   # Netlify's Next.js runtime: serves the .next build output from apps/web.
+  # Next.js API routes at app/api/* handle /api/verify, /api/health, etc.
   package = "@netlify/plugin-nextjs"
-
-# Route /api/* to the Go Netlify Function. force = true ensures this rule
-# takes precedence over @netlify/plugin-nextjs SPA routing.
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api"
-  status = 200
-  force = true
-[[redirects]]
-  from = "/api"
-  to = "/.netlify/functions/api"
-  status = 200
-  force = true
