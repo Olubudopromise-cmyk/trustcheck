@@ -95,6 +95,85 @@ function ResultCard({ result }: { result: VerifyResponse }) {
         <LegacyResult result={result} />
       ) : (
         <>
+          {/* Entity Identity - shown prominently at the top */}
+          {result.entityIdentity && (
+            <section
+              aria-label="Entity identification"
+              className="mt-3 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 dark:border-slate-800 dark:from-slate-900 dark:to-slate-900"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-lg dark:bg-cyan-900/30">
+                  {result.entityIdentity.entityType === 'government'
+                    ? '🏛️'
+                    : result.entityIdentity.entityType === 'place'
+                      ? '📍'
+                      : result.entityIdentity.entityType === 'company'
+                        ? '🏢'
+                        : result.entityIdentity.entityType === 'person'
+                          ? '👤'
+                          : '🔍'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                    {result.entityIdentity.canonicalName}
+                  </h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                    {result.entityIdentity.country && (
+                      <span className="inline-flex items-center gap-1">
+                        📍 {result.entityIdentity.country}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {result.entityIdentity.entityType}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        result.entityIdentity.identityConfidence === 'high'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                          : result.entityIdentity.identityConfidence === 'medium'
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}
+                    >
+                      {' '}
+                      Identity: {result.entityIdentity.identityConfidence}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {/* What is this? */}
+              {result.entityIdentity.description && (
+                <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    What is this?
+                  </h4>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                    {result.entityIdentity.description}
+                  </p>
+                </div>
+              )}
+              {/* Possible alternatives */}
+              {result.entityIdentity.possibleAlternatives &&
+                result.entityIdentity.possibleAlternatives.length > 0 && (
+                  <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Possible alternatives
+                    </h4>
+                    <ul className="mt-1 space-y-1">
+                      {result.entityIdentity.possibleAlternatives.map((alt, i) => (
+                        <li
+                          key={i}
+                          className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400"
+                        >
+                          <span className="text-slate-400 dark:text-slate-500">•</span>
+                          {alt}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+            </section>
+          )}
           {/* Reasoning timeline — first section, so the path from claim to
               verdict is visible before the detailed breakdown. */}
           <div className="mt-3">

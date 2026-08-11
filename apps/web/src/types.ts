@@ -117,6 +117,18 @@ export interface Claim {
   status?: ClaimStatus;
 }
 
+// Entity identification and disambiguation
+export interface EntityIdentity {
+  canonicalName: string;
+  entityType: string;
+  country?: string;
+  region?: string;
+  description: string;
+  identityConfidence: 'high' | 'medium' | 'low';
+  aliases: string[];
+  possibleAlternatives?: string[];
+}
+
 export type VerifyResponse = {
   input: string;
   type: string;
@@ -164,6 +176,8 @@ export type VerifyResponse = {
   sourceIntelligence?: SourceIntelligence[];
   // Security Intelligence Engine. Optional for security_review mode.
   securityReport?: SecurityReport;
+  // Entity identification and disambiguation. Optional for backward compatibility.
+  entityIdentity?: EntityIdentity;
 };
 
 // Evidence Depth & Analysis Modes types
