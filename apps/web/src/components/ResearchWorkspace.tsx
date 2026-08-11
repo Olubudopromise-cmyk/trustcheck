@@ -3,6 +3,7 @@
 import { memo } from 'react';
 import type { VerifyResponse } from '../types';
 import EmptyState from './EmptyState';
+import ErrorBoundary from './ErrorBoundary';
 import ErrorCard from './ErrorCard';
 import LoadingSpinner from './LoadingSpinner';
 import ResultCard from './ResultCard';
@@ -29,7 +30,9 @@ function ResearchWorkspace({ result, loading, error, isNewResearch }: ResearchWo
               isNewResearch ? 'animate-slideUp' : ''
             }`}
           >
-            <ResultCard result={result!} />
+            <ErrorBoundary>
+              <ResultCard result={result!} />
+            </ErrorBoundary>
           </div>
         )}
         {showEmpty && <EmptyState />}

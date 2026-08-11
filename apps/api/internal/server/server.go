@@ -168,11 +168,12 @@ func NewRouter(prefix string) *gin.Engine {
 
 		// Bound the analysis phase (including live web research) so the whole
 		// request always completes well inside the serverless function
-		// deadline (Netlify's synchronous default is 10s). When the deadline
-		// fires, the research module degrades honestly (partial evidence +
-		// warning signal) instead of the platform killing the request with a
-		// 502.
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Second)
+		// deadline (Netlify's synchronous default is 10s). We use 5 seconds
+		// to leave ample time for JSON serialization, response writing, and
+		// any cleanup after the analysis completes. When the deadline fires,
+		// the research module degrades honestly (partial evidence + warning
+		// signal) instead of the platform killing the request with a 502.
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 		defer cancel()
 
 		detected := classifier.Detect(req.Input)

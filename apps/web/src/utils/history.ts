@@ -372,7 +372,7 @@ export function normalizeVerifyResponse(raw: unknown): VerifyResponse {
     analysisMode: normalizeAnalysisMode(r.analysisMode),
     evidenceLedger: normalizeEvidenceLedger(r.evidenceLedger),
     scoreExplanation: normalizeScoreExplanation(r.scoreExplanation),
-    sourceIntelligence: normalizeSourceIntelligence(r.sourceIntelligence),
+    sourceIntelligence: normalizeSourceIntelligence(r.sourceIntelligence) ?? [],
     securityReport: (asRecord(r.securityReport) ??
       undefined) as unknown as VerifyResponse['securityReport'],
   };

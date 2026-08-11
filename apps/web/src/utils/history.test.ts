@@ -264,4 +264,159 @@ describe('normalizeVerifyResponse', () => {
       expect(Array.isArray(normalized.timeline ?? [])).toBe(true);
     }
   });
+
+  it('handles null values in all optional fields without crashing', () => {
+    const withNulls = {
+      input: 'test',
+      type: 'unknown',
+      status: 'invalid',
+      trustScore: 0,
+      summary: '',
+      evidence: [],
+      verdict: null,
+      keyClaim: null,
+      entities: null,
+      keywords: null,
+      evidenceFor: null,
+      evidenceAgainst: null,
+      missingEvidence: null,
+      unknownInformation: null,
+      interpretations: null,
+      warningSignals: null,
+      confidence: null,
+      reasoning: null,
+      timeline: null,
+      recommendations: null,
+      supportingEvidence: null,
+      contradictingEvidence: null,
+      missingInformation: null,
+      confidenceBreakdown: null,
+      aiSummary: null,
+      suggestedReading: null,
+      whatChanged: null,
+      claims: null,
+      claimCount: null,
+      verifiedClaims: null,
+      partialClaims: null,
+      unverifiedClaims: null,
+      analysisMode: null,
+      evidenceLedger: null,
+      scoreExplanation: null,
+      sourceIntelligence: null,
+    };
+    expect(() => normalizeVerifyResponse(withNulls)).not.toThrow();
+    const normalized = normalizeVerifyResponse(withNulls);
+    expect(normalized.input).toBe('test');
+    expect(normalized.evidence).toEqual([]);
+    expect(normalized.entities).toEqual([]);
+    expect(normalized.keywords).toEqual([]);
+    expect(normalized.evidenceFor).toEqual([]);
+    expect(normalized.evidenceAgainst).toEqual([]);
+    expect(normalized.interpretations).toEqual([]);
+    expect(normalized.warningSignals).toEqual([]);
+    expect(normalized.timeline).toBeUndefined();
+    expect(normalized.recommendations).toEqual([]);
+    expect(normalized.contradictingEvidence).toEqual([]);
+    expect(normalized.missingInformation).toEqual([]);
+    expect(normalized.claims).toEqual([]);
+    expect(normalized.sourceIntelligence).toEqual([]);
+  });
+
+  it('handles deeply nested malformed data without crashing', () => {
+    const deeplyMalformed = {
+      input: 'test',
+      type: 'unknown',
+      status: 'invalid',
+      trustScore: 0,
+      summary: '',
+      evidence: [],
+      claims: [
+        {
+          id: 'c1',
+          text: 'claim',
+          entities: [{ notName: 123 }],
+          keywords: [123, null, 'valid'],
+          evidence: [{ notLabel: true }],
+          conflicts: [{ notSourceA: true }],
+          timeline: [{ notTitle: true }],
+          recommendations: [{ notTitle: true }],
+          missingInformation: [{ notItem: true }],
+        },
+      ],
+      supportingEvidence: [
+        {
+          category: 123,
+          items: [{ notTitle: true }],
+        },
+      ],
+      contradictingEvidence: [{ notSourceA: true }],
+      missingInformation: [{ notItem: true }],
+      interpretations: [{ notTitle: true }],
+      warningSignals: [{ notLabel: true }],
+      recommendations: [{ notTitle: true }],
+      suggestedReading: [{ notTitle: true }],
+      whatChanged: [{ notDate: true }],
+    };
+    expect(() => normalizeVerifyResponse(deeplyMalformed)).not.toThrow();
+    const normalized = normalizeVerifyResponse(deeplyMalformed);
+    expect(normalized.claims).toHaveLength(1);
+    expect(normalized.claims?.[0]?.text).toBe('claim');
+    expect(normalized.claims?.[0]?.keywords).toEqual(['valid']);
+    expect(normalized.supportingEvidence).toHaveLength(1);
+  });
+
+  it('preserves valid data when mixed with invalid data in arrays', () => {
+    const mixedArray = {
+      input: 'test',
+      type: 'unknown',
+      status: 'invalid',
+      trustScore: 0,
+      summary: '',
+      evidence: [],
+      claims: [null, { text: 'valid' }, 123, { text: 'also valid' }],
+      interpretations: [
+        null,
+        {
+          title: 'valid',
+          explanation: 'e',
+          confidence: 50,
+          reasoning: 'r',
+          supportingEvidenceCount: 1,
+        },
+      ],
+      warningSignals: ['invalid', { label: 'valid', severity: 'low', description: 'd' }],
+    };
+    const normalized = normalizeVerifyResponse(mixedArray);
+    // Only valid objects should be included
+    expect(normalized.claims).toHaveLength(2);
+    expect(normalized.claims?.[0]?.text).toBe('valid');
+    expect(normalized.claims?.[1]?.text).toBe('also valid');
+    expect(normalized.interpretations).toHaveLength(1);
+    expect(normalized.warningSignals).toHaveLength(1);
+  });
+
+  it('handles NaN and Infinity in numeric fields gracefully', () => {
+    const withBadNumbers = {
+      input: 'test',
+      type: 'unknown',
+      status: 'invalid',
+      trustScore: NaN,
+      summary: '',
+      evidence: [],
+      confidence: Infinity,
+      claims: [
+        {
+          id: 'c1',
+          text: 'claim',
+          confidence: NaN,
+          evidence: [{ label: 'e', result: 'pass', points: Infinity }],
+        },
+      ],
+    };
+    const normalized = normalizeVerifyResponse(withBadNumbers);
+    // NaN and Infinity should be replaced with safe defaults
+    expect(normalized.trustScore).toBe(0);
+    expect(normalized.confidence).toBeUndefined();
+    expect(normalized.claims?.[0]?.confidence).toBeUndefined();
+  });
 });

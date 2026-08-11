@@ -29,7 +29,9 @@ const apiPrefix = "/api"
 var ginLambda *ginadapter.GinLambda
 
 func init() {
+	log.Println("Initializing API router...")
 	ginLambda = ginadapter.New(server.NewRouter(apiPrefix))
+	log.Println("API router initialized successfully")
 }
 
 // handler translates the Netlify/Lambda proxy event into an HTTP request and
@@ -38,6 +40,7 @@ func init() {
 // 502: the panic is written to the function logs (where it can actually be
 // diagnosed) and a clean 500 JSON response is returned instead.
 func handler(ctx context.Context, req events.APIGatewayProxyRequest) (resp events.APIGatewayProxyResponse, err error) {
+	log.Printf("Handling request: %s %s", req.HTTPMethod, req.Path)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("[panic] recovered in handler for %s %s: %v", req.HTTPMethod, req.Path, r)
@@ -52,7 +55,28 @@ func handler(ctx context.Context, req events.APIGatewayProxyRequest) (resp event
 	}()
 
 	req.Path = normalizePath(req.Path)
-	return ginLambda.ProxyWithContext(ctx, req)
+	log.Printf("Normalized path: %s", req.Path)
+	resp, err = ginLambda.ProxyWithContext(ctx, req)
+	if err != nil {
+		// If the context was cancelled (Lambda deadline or client disconnect),
+		// the adapter may return a partial/empty response but the error is
+			// just context cancellation — not a real failure. Return whatever
+			// response we have instead of propagating the error, which would
+			// cause the platform to surface a 502 for a normal timeout.
+		if ctx.Err() != nil {
+			log.Printf("[warn] context expired for %s %s: %v (returning partial response)", req.HTTPMethod, req.Path, ctx.Err())
+			if resp.Body == "" {
+				resp = events.APIGatewayProxyResponse{
+					StatusCode: http.StatusGatewayTimeout,
+					Headers:    map[string]string{"Content-Type": "application/json"},
+					Body:       `{"error":"request timed out"}`,
+				}
+			}
+			return resp, nil
+		}
+		log.Printf("[error] handler failed for %s %s: %v", req.HTTPMethod, req.Path, err)
+	}
+	return resp, err
 }
 
 // normalizePath maps whatever path Netlify delivers to the route the router
