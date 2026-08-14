@@ -1,8 +1,10 @@
 'use client';
 
-import { memo, useCallback, useRef, useEffect } from 'react';
+import { memo, useCallback, useRef, useEffect, useState } from 'react';
 import type { AnalysisMode } from '../types';
+import type { ImageProcessingResult } from '../utils/imageProcessing';
 import AnalysisModeSelector from './AnalysisModeSelector';
+import ImageUpload from './ImageUpload';
 
 interface WorkspaceComposerProps {
   value: string;
@@ -12,6 +14,8 @@ interface WorkspaceComposerProps {
   disabled?: boolean;
   mode: AnalysisMode;
   onModeChange: (mode: AnalysisMode) => void;
+  onImageAttached?: (result: ImageProcessingResult) => void;
+  imageResult?: ImageProcessingResult | null;
 }
 
 function WorkspaceComposer({
@@ -22,8 +26,11 @@ function WorkspaceComposer({
   disabled,
   mode,
   onModeChange,
+  onImageAttached,
+  imageResult,
 }: WorkspaceComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const canSubmit = value.trim().length > 0 && !loading && !disabled;
 
   // Auto-resize textarea
@@ -53,10 +60,30 @@ function WorkspaceComposer({
     [canSubmit, onSubmit],
   );
 
+  const handleImageProcessed = useCallback(
+    (result: ImageProcessingResult) => {
+      setImageError(null);
+      if (onImageAttached) {
+        onImageAttached(result);
+      }
+    },
+    [onImageAttached],
+  );
+
+  const handleImageError = useCallback((error: string) => {
+    setImageError(error);
+  }, []);
+
   return (
     <div className="sticky bottom-0 z-30 border-t border-slate-200 bg-white/80 backdrop-blur-lg dark:border-slate-800 dark:bg-slate-950/80">
       <form onSubmit={handleSubmit} className="mx-auto max-w-4xl px-4 py-3">
         <div className="flex items-end gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900 dark:shadow-none">
+          {/* Image upload button */}
+          <ImageUpload
+            onImageProcessed={handleImageProcessed}
+            onError={handleImageError}
+            disabled={loading || disabled}
+          />
           <textarea
             ref={textareaRef}
             value={value}
@@ -106,6 +133,16 @@ function WorkspaceComposer({
         <p className="mt-2 text-center text-xs text-slate-400 dark:text-slate-500">
           Press Enter to verify &middot; Shift+Enter for new line
         </p>
+        {imageError && (
+          <p className="mt-2 text-center text-xs text-red-500 dark:text-red-400">{imageError}</p>
+        )}
+        {imageResult && !imageError && (
+          <div className="mt-2 rounded-lg border border-cyan-200 bg-cyan-50 p-2 text-xs text-cyan-700 dark:border-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300">
+            <span className="font-medium">Image evidence attached:</span> {imageResult.imageType}{' '}
+            image processed
+            {imageResult.extractedText && ' with extracted text'}
+          </div>
+        )}
       </form>
     </div>
   );

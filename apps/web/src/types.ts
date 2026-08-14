@@ -20,6 +20,33 @@ export interface EvidenceItem {
   result: EvidenceResult;
   points: number;
   note?: string;
+  // Visual evidence fields (optional for backward compatibility)
+  imageUrl?: string;
+  sourceImage?: string;
+  extractedText?: string; // OCR extracted text
+  metadata?: ImageMetadata; // EXIF/metadata
+  provenance?: ImageProvenance; // Reverse image search findings
+  imageType?: ImageType; // Type of image content
+}
+
+// Image evidence types
+export type ImageType =
+  'storefront' | 'document' | 'logo' | 'building' | 'screenshot' | 'product' | 'person' | 'unknown';
+
+export interface ImageMetadata {
+  gpsLatitude?: number;
+  gpsLongitude?: number;
+  captureDate?: string;
+  device?: string;
+  // Only include fields that are actually present in the image
+}
+
+export interface ImageProvenance {
+  foundElsewhere: boolean;
+  otherOccurrences?: number;
+  sourceUrls?: string[];
+  isStockPhoto?: boolean;
+  summary: string; // Human-readable summary of provenance findings
 }
 
 export interface Interpretation {

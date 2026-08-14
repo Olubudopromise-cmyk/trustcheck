@@ -8,6 +8,7 @@ import ThemeToggle from '../components/ThemeToggle';
 import WorkspaceComposer from '../components/WorkspaceComposer';
 import { useVerificationHistory } from '../hooks/useVerificationHistory';
 import type { AnalysisMode, VerificationHistoryItem, VerifyResponse } from '../types';
+import type { ImageProcessingResult } from '../utils/imageProcessing';
 import { verify } from '../utils/api';
 import { normalizeAnalysisMode, normalizeVerifyResponse } from '../utils/history';
 
@@ -20,7 +21,12 @@ export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewResearch, setIsNewResearch] = useState(true);
   const [mode, setMode] = useState<AnalysisMode>('quick');
+  const [imageResult, setImageResult] = useState<ImageProcessingResult | null>(null);
   const { history, remember, remove } = useVerificationHistory();
+
+  const handleImageAttached = useCallback((result: ImageProcessingResult) => {
+    setImageResult(result);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     setResult(null);
@@ -38,6 +44,43 @@ export default function HomePage() {
       // so every render path — fresh results and persisted history — sees the
       // same safe shape.
       const normalized = normalizeVerifyResponse(data);
+
+      // If we have image evidence, integrate it into the result
+      if (imageResult && !imageResult.error) {
+        const imageEvidence = {
+          label: `Image Evidence: ${imageResult.imageType}`,
+          result: 'info' as const,
+          points: 0,
+          note: imageResult.extractedText
+            ? `OCR extracted text: ${imageResult.extractedText}`
+            : 'Image analyzed for visual evidence',
+          // Don't persist blob URLs to localStorage - they become invalid after reload
+          // imageUrl: imageResult.imageUrl,
+          // sourceImage: imageResult.sourceImage,
+          extractedText: imageResult.extractedText,
+          metadata: imageResult.metadata,
+          provenance: imageResult.provenance,
+          imageType: imageResult.imageType,
+        };
+
+        // Add image evidence to the existing evidence arrays
+        if (normalized.evidenceFor) {
+          normalized.evidenceFor = [...normalized.evidenceFor, imageEvidence];
+        } else {
+          normalized.evidenceFor = [imageEvidence];
+        }
+
+        // Add to main evidence array as well
+        normalized.evidence = [
+          ...normalized.evidence,
+          {
+            label: imageEvidence.label,
+            result: imageEvidence.result,
+            points: imageEvidence.points,
+          },
+        ];
+      }
+
       setResult(normalized);
       const item = remember(trimmed, normalized);
       setActiveId(item?.id ?? null);
@@ -45,8 +88,9 @@ export default function HomePage() {
       setError(e instanceof Error ? e.message : 'Something went wrong. Is the backend running?');
     } finally {
       setLoading(false);
+      // Don't clear imageResult here - it should persist for the result display
     }
-  }, [input, remember, mode]);
+  }, [input, remember, mode, imageResult]);
 
   const handleReopen = useCallback((item: VerificationHistoryItem) => {
     setInput(item.input);
@@ -72,6 +116,7 @@ export default function HomePage() {
     setError(null);
     setIsNewResearch(true);
     setSidebarOpen(false);
+    setImageResult(null); // Clear image result when starting new research
     // Focus the composer after a brief delay
     setTimeout(() => {
       const textarea = document.querySelector(
@@ -164,6 +209,8 @@ export default function HomePage() {
           loading={loading}
           mode={mode}
           onModeChange={setMode}
+          onImageAttached={handleImageAttached}
+          imageResult={imageResult}
         />
         {/* Batch verification section - hidden in workspace mode, accessible via sidebar */}
         {/* Keeping batch functionality accessible but not prominent in workspace layout */}

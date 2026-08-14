@@ -12,6 +12,7 @@ import ContradictingEvidence from './ContradictingEvidence';
 import EvidenceList from './EvidenceList';
 import EvidenceSections from './EvidenceSections';
 import ExportMenu from './ExportMenu';
+import ImageEvidence from './ImageEvidence';
 import InterpretationsList from './InterpretationsList';
 import MainClaimSection from './MainClaimSection';
 import MissingInformation from './MissingInformation';
@@ -295,6 +296,20 @@ function ResultCard({ result }: { result: VerifyResponse }) {
             <div className="mt-3">
               <CollapsibleSection title="Evidence Ledger" defaultOpen>
                 <EvidenceLedger ledger={result.evidenceLedger} />
+              </CollapsibleSection>
+            </div>
+          )}
+          {/* Image Evidence - Visual evidence from uploaded images */}
+          {result.evidenceFor?.some((e) => e.imageType) && (
+            <div className="mt-3">
+              <CollapsibleSection title="Image Evidence" defaultOpen>
+                <div className="space-y-3">
+                  {result.evidenceFor
+                    ?.filter((e) => e.imageType)
+                    .map((evidence, index) => (
+                      <ImageEvidence key={index} evidence={evidence} />
+                    ))}
+                </div>
               </CollapsibleSection>
             </div>
           )}
